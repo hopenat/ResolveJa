@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Avatar, Icon, MapSvg, STATUS_LABEL } from '../components/ui'
 import { AddressSection, PhotoPicker } from '../components/Account'
 import { brl, fmtCountdown, fmtWhen, logout, setStatus, toggleOnline, useDB, useNow, userById, type Request, type User } from '../lib/store'
@@ -28,7 +28,7 @@ function Actions({ r }: { r: Request }) {
 }
 
 function Dash({ me, mine, now }: { me: User; mine: Request[]; now: number }) {
-  const pending = mine.filter((r) => r.status === 'pending').sort((a, b) => a.expiresAt - b.expiresAt)
+  const pending = mine.filter((r) => r.status === 'pending').sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || a.expiresAt - b.expiresAt)
   const earn = mine.filter((r) => r.status === 'accepted' || r.status === 'done').reduce((s, r) => s + r.price, 0)
   const next = pending[0]
   const client = next ? userById(next.clientId) : null
@@ -51,8 +51,8 @@ function Dash({ me, mine, now }: { me: User; mine: Request[]; now: number }) {
       </div>
       <div className="absolute bottom-24 inset-x-4">
         {next && me.online ? (
-          <div key={next.id} className="bg-navy-950 text-white rounded-3xl p-4 shadow-[0_16px_40px_-8px_rgba(0,0,0,.7)] border border-white/10 space-y-3 slide-up">
-            <p className="flex items-center gap-2 text-xs font-extrabold text-urgent"><span className="w-2 h-2 rounded-full bg-urgent animate-ping" />NOVO SERVIÇO PRÓXIMO</p>
+          <div key={next.id} className={`bg-navy-950 text-white rounded-3xl p-4 shadow-[0_16px_40px_-8px_rgba(0,0,0,.7)] border space-y-3 slide-up ${next.urgent ? 'border-urgent ring-2 ring-urgent/40' : 'border-white/10'}`}>
+            <p className="flex items-center gap-2 text-xs font-extrabold text-urgent"><span className="w-2 h-2 rounded-full bg-urgent animate-ping" />{next.urgent ? '⚡ CHAMADO URGENTE · ATENDIMENTO IMEDIATO' : 'NOVO SERVIÇO PRÓXIMO'}</p>
             <div className="flex items-center gap-3">
               <Avatar name={client?.name ?? '?'} photo={client?.photo} className="w-14 h-14" />
               <div className="flex-1 min-w-0"><p className="font-extrabold truncate">{client?.name}</p><p className="text-sm text-white/60 line-clamp-2">{next.description}</p></div>
@@ -87,7 +87,8 @@ function Jobs({ mine, now }: { mine: Request[]; now: number }) {
         {list.map((r) => {
           const c = userById(r.clientId); const st = STATUS_LABEL[r.status]
           return (
-            <article key={r.id} className="bg-navy-800/70 border border-white/10 rounded-3xl p-4 space-y-3">
+            <article key={r.id} className={`bg-navy-800/70 border rounded-3xl p-4 space-y-3 ${r.urgent && r.status === 'pending' ? 'border-urgent' : 'border-white/10'}`}>
+              {r.urgent && <p className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-urgent text-white px-2.5 py-1 rounded-full"><Icon n="bolt" className="w-3 h-3" />URGENTE</p>}
               <div className="flex items-center gap-3"><Avatar name={c?.name ?? '?'} /><div className="flex-1 min-w-0"><p className="font-extrabold truncate">{c?.name}</p><p className="text-xs text-white/60">{fmtWhen(r.serviceAt)}</p></div><p className="font-extrabold text-emerald">{brl(r.price)}</p></div>
               <p className="text-sm text-white/80">{r.description}</p>
               <p className="text-xs text-white/50 flex items-center gap-1"><Icon n="pin" className="w-3.5 h-3.5" />{r.address}</p>
@@ -140,9 +141,23 @@ export default function ProviderApp({ me }: { me: User }) {
   const [tab, setTab] = useState<Tab>('dash')
   const mine = requests.filter((r) => r.proId === me.id).sort((a, b) => b.createdAt - a.createdAt)
   const pending = mine.filter((r) => r.status === 'pending').length
+  const urgentNow = mine.filter((r) => r.status === 'pending' && r.urgent && r.expiresAt > now).sort((a, b) => a.expiresAt - b.expiresAt)[0]
+  const alerted = useRef(new Set<string>())
+  useEffect(() => {
+    if (!urgentNow || !me.online || alerted.current.has(urgentNow.id)) return
+    alerted.current.add(urgentNow.id)
+    try { navigator.vibrate?.([200, 100, 200]) } catch { /* noop */ }
+  }, [urgentNow, me.online])
   const nav: { t: Tab; l: string; i: string }[] = [{ t: 'dash', l: 'Rotas', i: 'nav' }, { t: 'jobs', l: 'Chamados', i: 'list' }, { t: 'me', l: 'Perfil', i: 'user' }]
   return (
     <div className="h-full relative bg-navy-950">
+      {urgentNow && me.online && tab !== 'dash' && (
+        <button onClick={() => setTab('dash')} className="absolute top-3 inset-x-3 z-40 flex items-center gap-3 rounded-2xl bg-urgent text-white px-4 py-3 text-left shadow-2xl shadow-black/50 slide-up">
+          <span className="w-9 h-9 rounded-xl bg-white/20 grid place-items-center animate-pulse"><Icon n="bolt" className="w-5 h-5" /></span>
+          <span className="min-w-0 flex-1 leading-tight"><span className="block text-xs font-extrabold">CHAMADO URGENTE</span><span className="block font-extrabold truncate">{userById(urgentNow.clientId)?.name} · {urgentNow.category}</span></span>
+          <span className="tabular-nums font-extrabold text-lg">{fmtCountdown(urgentNow.expiresAt - now)}</span>
+        </button>
+      )}
       <main className="h-full">
         {tab === 'dash' && <Dash me={me} mine={mine} now={now} />}
         {tab === 'jobs' && <Jobs mine={mine} now={now} />}
@@ -151,7 +166,7 @@ export default function ProviderApp({ me }: { me: User }) {
       <nav className="absolute bottom-0 inset-x-0 z-30 bg-navy-950/95 backdrop-blur border-t border-white/10 grid grid-cols-3 px-2 pt-2 pb-4">
         {nav.map((n) => (
           <button key={n.t} onClick={() => setTab(n.t)} className={`flex flex-col items-center gap-0.5 py-1.5 text-[11px] font-bold transition ${tab === n.t ? 'text-white' : 'text-white/40'}`}>
-            <span className={`relative px-4 py-1 rounded-full transition ${tab === n.t ? 'bg-urgent text-white' : ''}`}><Icon n={n.i} className="w-5 h-5" />{n.t === 'jobs' && pending > 0 && <span className="absolute -top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-emerald text-[10px] grid place-items-center text-white">{pending}</span>}</span>{n.l}
+            <span className={`relative px-4 py-1 rounded-full transition ${tab === n.t ? 'bg-urgent text-white' : ''}`}><Icon n={n.i} className="w-5 h-5" />{n.t === 'jobs' && pending > 0 && <span className={`absolute -top-1 right-1 min-w-4 h-4 px-1 rounded-full ${urgentNow ? 'bg-red-500 animate-pulse' : 'bg-emerald'} text-[10px] grid place-items-center text-white`}>{pending}</span>}</span>{n.l}
           </button>
         ))}
       </nav>

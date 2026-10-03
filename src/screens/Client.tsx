@@ -5,6 +5,7 @@ import { addCard, brl, createRequest, fmtAddress, fmtCountdown, fmtWhen, logout,
 
 type Tab = 'home' | 'map' | 'orders' | 'me'
 const CATS = ['Eletricista', 'Encanador', 'Diarista', 'Montador', 'Frete']
+const URGENT_WAITS = [{ m: 5, l: '5 min' }, { m: 10, l: '10 min' }, { m: 15, l: '15 min' }]
 const WAITS = [{ m: 15, l: '15 min' }, { m: 30, l: '30 min' }, { m: 60, l: '1 hora' }, { m: 120, l: '2 horas' }, { m: 240, l: '4 horas' }]
 
 const Stars = ({ n, className = 'w-3.5 h-3.5' }: { n: number; className?: string }) => <span className="flex">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= n ? '' : 'opacity-20 grayscale'}><Star className={className} /></span>)}</span>
@@ -232,12 +233,14 @@ function PayOption({ on, onClick, title, sub }: { on: boolean; onClick: () => vo
   )
 }
 
-function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClose: () => void; onDone: () => void }) {
+function RequestSheet({ pro, me, urgentDefault, onClose, onDone }: { pro: User; me: User; urgentDefault: boolean; onClose: () => void; onDone: () => void }) {
   const dt = useMemo(defaultDateTime, [])
   const [desc, setDesc] = useState('')
   const [date, setDate] = useState(dt.date)
   const [time, setTime] = useState(dt.time)
-  const [wait, setWait] = useState(60)
+  const [urgent, setUrgent] = useState(urgentDefault)
+  const [wait, setWait] = useState(urgentDefault ? 10 : 60)
+  const toggleUrgent = () => { setUrgent(!urgent); setWait(!urgent ? 10 : 60) }
   const defAddr = me.addresses?.find((a) => a.isDefault) ?? me.addresses?.[0]
   const [addr, setAddr] = useState(defAddr ? fmtAddress(defAddr) : '')
   const defCard = me.cards?.find((c) => c.isDefault) ?? me.cards?.[0]
@@ -247,13 +250,13 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
   const field = 'w-full rounded-2xl bg-navy-100/70 px-4 py-3 font-semibold outline-none focus:ring-2 focus:ring-emerald'
 
   function send() {
-    const at = new Date(`${date}T${time}`)
+    const at = urgent ? new Date(Date.now() + (pro.eta ?? 10) * 60_000) : new Date(`${date}T${time}`)
     if (!desc.trim()) return setErr('Descreva rapidamente o que você precisa.')
     if (!addr.trim()) return setErr('Informe o endereço do serviço.')
-    if (isNaN(at.getTime()) || at.getTime() < Date.now()) return setErr('Escolha uma data e hora no futuro.')
+    if (!urgent && (isNaN(at.getTime()) || at.getTime() < Date.now())) return setErr('Escolha uma data e hora no futuro.')
     const card = pay.startsWith('card:') ? me.cards?.find((c) => c.id === pay.slice(5)) : undefined
     const payLabel = card ? cardLabel(card) : pay === 'pix' ? 'Pix' : 'Dinheiro'
-    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim(), payment: payLabel })
+    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim(), payment: payLabel, urgent })
     onDone()
   }
   if (newCard) return <CardForm holderHint={me.name} onClose={() => setNewCard(false)} onSave={(c) => { setPay(`card:${addCard(me.id, c)}`); setNewCard(false) }} />
@@ -267,6 +270,11 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
       <div className="mt-5 space-y-4">
         <label className="block"><span className="text-xs font-bold text-navy-900/60">O QUE PRECISA SER FEITO?</span>
           <textarea rows={2} className={`${field} mt-1.5 resize-none`} placeholder="Ex.: chuveiro não esquenta, disjuntor desarma…" value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
+        <button type="button" role="switch" aria-checked={urgent} onClick={toggleUrgent} className={`w-full text-left rounded-2xl px-4 py-3 flex items-center gap-3 border-2 transition ${urgent ? 'border-urgent bg-urgent/10' : 'border-transparent bg-navy-100/60'}`}>
+          <span className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${urgent ? 'bg-urgent text-white' : 'bg-white text-urgent'}`}><Icon n="bolt" className="w-5 h-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block font-extrabold leading-tight">Chamado urgente</span><span className="block text-xs text-navy-900/55">{urgent ? `Atendimento imediato: ${pro.name.split(' ')[0]} é avisado agora e chega em cerca de ${pro.eta} min` : 'Peça atendimento imediato e avise o profissional com prioridade'}</span></span>
+          <span className={`relative w-12 h-7 rounded-full transition shrink-0 ${urgent ? 'bg-urgent' : 'bg-navy-900/20'}`}><span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${urgent ? 'left-[22px]' : 'left-0.5'}`} /></span>
+        </button>
         <label className="block"><span className="text-xs font-bold text-navy-900/60">ENDEREÇO</span>
           {!!me.addresses?.length && <div className="flex gap-2 mt-1.5 flex-wrap">{me.addresses.map((a) => <button type="button" key={a.id} onClick={() => setAddr(fmtAddress(a))} className={`px-3.5 py-2 rounded-full text-sm font-extrabold transition ${addr === fmtAddress(a) ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{a.label}</button>)}</div>}
           <input className={`${field} mt-1.5`} placeholder="Rua, número, bairro" value={addr} onChange={(e) => setAddr(e.target.value)} /></label>
@@ -279,19 +287,19 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
             <button type="button" onClick={() => setNewCard(true)} className="w-full rounded-2xl border-2 border-dashed border-navy-100 py-3 text-sm font-extrabold text-navy-900/70 hover:border-emerald transition">+ Cadastrar cartão de crédito/débito</button>
           </div>
         </div>
-        <div>
+        {!urgent && <div>
           <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="cal" className="w-4 h-4" />QUANDO O SERVIÇO DEVE ACONTECER?</span>
           <div className="grid grid-cols-2 gap-3 mt-1.5">
             <input type="date" className={field} value={date} onChange={(e) => setDate(e.target.value)} />
             <input type="time" className={field} value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
-        </div>
+        </div>}
         <div>
           <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="clock" className="w-4 h-4" />ESPERAR A RESPOSTA ATÉ…</span>
           <div className="flex gap-2 mt-1.5 flex-wrap">
-            {WAITS.map((w) => <button key={w.m} onClick={() => setWait(w.m)} className={`px-4 py-2.5 rounded-full text-sm font-extrabold transition ${wait === w.m ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{w.l}{w.m === 60 && wait !== 60 ? '' : ''}</button>)}
+            {(urgent ? URGENT_WAITS : WAITS).map((w) => <button key={w.m} type="button" onClick={() => setWait(w.m)} className={`px-4 py-2.5 rounded-full text-sm font-extrabold transition ${wait === w.m ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{w.l}{w.m === 60 && wait !== 60 ? '' : ''}</button>)}
           </div>
-          <p className="text-xs text-navy-900/50 mt-2">Se {pro.name.split(' ')[0]} não responder nesse prazo, o pedido expira automaticamente. Padrão: 1 hora.</p>
+          <p className="text-xs text-navy-900/50 mt-2">Se {pro.name.split(' ')[0]} não responder nesse prazo, o pedido expira automaticamente. {urgent ? 'Padrão no modo urgente: 10 minutos.' : 'Padrão: 1 hora.'}</p>
         </div>
         {err && <p role="alert" className="text-sm font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</p>}
         <button onClick={send} className="w-full rounded-2xl py-4 font-extrabold text-white text-lg bg-emerald hover:bg-emerald-dark active:scale-95 transition shadow-lg shadow-emerald/40">Enviar solicitação</button>
@@ -352,6 +360,7 @@ function OrderCard({ r, now, onReview }: { r: Request; now: number; onReview: ()
         <div className="flex-1 min-w-0"><p className="font-extrabold truncate">{pro?.name}</p><p className="text-sm text-navy-900/60">{r.category}</p></div>
         <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full ${st.c}`}>{st.l}</span>
       </div>
+      {r.urgent && <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-extrabold bg-urgent text-white px-2.5 py-1 rounded-full"><Icon n="bolt" className="w-3 h-3" />CHAMADO URGENTE</p>}
       <p className="text-sm mt-3 text-navy-900/80">{r.description}</p>
       <p className="flex items-center gap-1.5 text-sm font-bold mt-2"><Icon n="cal" className="w-4 h-4 text-emerald-dark" />{fmtWhen(r.serviceAt)}</p>
       {r.status === 'pending' && (
@@ -475,7 +484,7 @@ export default function ClientApp({ me }: { me: User }) {
         {view === 'me' && <Me me={me} />}
       </main>
       <Sheet open={!!reqPro} onClose={() => setReqPro(null)}>
-        {reqPro && <RequestSheet pro={reqPro} me={me} onClose={() => setReqPro(null)} onDone={() => { setReqPro(null); setPro(null); setTab('orders') }} />}
+        {reqPro && <RequestSheet pro={reqPro} me={me} urgentDefault={urgent} onClose={() => setReqPro(null)} onDone={() => { setReqPro(null); setPro(null); setTab('orders') }} />}
       </Sheet>
       <nav className="absolute bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-navy-100 grid grid-cols-4 px-2 pt-2 pb-4">
         {nav.map((n) => (
