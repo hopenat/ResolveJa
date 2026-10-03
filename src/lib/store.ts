@@ -124,7 +124,11 @@ export const removeAddress = (id: string, aid: string) => patchUser(id, (u) => {
   return { ...u, addresses: rest.some((a) => a.isDefault) || !rest.length ? rest : rest.map((a, i) => ({ ...a, isDefault: i === 0 })) }
 })
 export const setDefaultAddress = (id: string, aid: string) => patchUser(id, (u) => ({ ...u, addresses: (u.addresses ?? []).map((a) => ({ ...a, isDefault: a.id === aid })) }))
-export const addCard = (id: string, c: Omit<Card, 'id'>) => patchUser(id, (u) => ({ ...u, cards: withDefault(u.cards ?? [], { ...c, id: newId('k'), isDefault: false }) }))
+export function addCard(id: string, c: Omit<Card, 'id'>) {
+  const cid = newId('k')
+  patchUser(id, (u) => ({ ...u, cards: withDefault(u.cards ?? [], { ...c, id: cid, isDefault: false }) }))
+  return cid
+}
 export const removeCard = (id: string, cid: string) => patchUser(id, (u) => {
   const rest = (u.cards ?? []).filter((c) => c.id !== cid)
   return { ...u, cards: rest.some((c) => c.isDefault) || !rest.length ? rest : rest.map((c, i) => ({ ...c, isDefault: i === 0 })) }
