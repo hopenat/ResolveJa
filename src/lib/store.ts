@@ -26,7 +26,7 @@ export type Request = {
   id: string; clientId: string; proId: string; category: string; description: string
   serviceAt: string; waitMinutes: number; createdAt: number; expiresAt: number
   status: Status; price: number; address: string; respondedAt?: number
-  payment?: string; review?: Review
+  payment?: string; review?: Review; urgent?: boolean
 }
 type DB = { users: User[]; requests: Request[]; session: string | null }
 
@@ -95,7 +95,7 @@ export const toggleOnline = (id: string) => {
   pushUser(users.find((u) => u.id === id)!); lastWrite = Date.now(); set({ ...db, users })
 }
 
-export function createRequest(r: { clientId: string; proId: string; description: string; serviceAt: string; waitMinutes: number; address: string; payment?: string }) {
+export function createRequest(r: { clientId: string; proId: string; description: string; serviceAt: string; waitMinutes: number; address: string; payment?: string; urgent?: boolean }) {
   const pro = db.users.find((u) => u.id === r.proId)!
   const now = Date.now()
   const req: Request = { id: `r-${now}`, ...r, category: pro.category ?? '', createdAt: now, expiresAt: now + r.waitMinutes * MIN, status: 'pending', price: pro.price ?? 0 }

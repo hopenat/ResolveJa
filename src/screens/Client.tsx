@@ -5,10 +5,12 @@ import { addCard, brl, createRequest, fmtAddress, fmtCountdown, fmtWhen, logout,
 
 type Tab = 'home' | 'map' | 'orders' | 'me'
 const CATS = ['Eletricista', 'Encanador', 'Diarista', 'Montador', 'Frete']
+const URGENT_WAITS = [{ m: 5, l: '5 min' }, { m: 10, l: '10 min' }, { m: 15, l: '15 min' }]
 const WAITS = [{ m: 15, l: '15 min' }, { m: 30, l: '30 min' }, { m: 60, l: '1 hora' }, { m: 120, l: '2 horas' }, { m: 240, l: '4 horas' }]
 
 const Stars = ({ n, className = 'w-3.5 h-3.5' }: { n: number; className?: string }) => <span className="flex">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= n ? '' : 'opacity-20 grayscale'}><Star className={className} /></span>)}</span>
 
+const URGENT_ETA = 10
 const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 const KEYWORDS: Record<string, string> = {
   Eletricista: 'eletrica eletrico luz lampada tomada chuveiro disjuntor fio fiacao quadro ventilador curto',
@@ -41,8 +43,8 @@ function ProCard({ p, onOpen, active, wide }: { p: User; onOpen: () => void; act
   )
 }
 
-function Home({ me, pros, go, pick, filter, q, setQ }: { me: User; pros: User[]; go: (t: Tab) => void; pick: (p: User) => void; filter: (c: string | null) => void; q: string; setQ: (q: string) => void }) {
-  const suggestions = q.trim() ? pros.filter((p) => matches(p, q)).slice(0, 4) : []
+function Home({ me, pros, go, pick, filter, q, setQ, urgent, setUrgent }: { me: User; pros: User[]; go: (t: Tab) => void; pick: (p: User) => void; filter: (c: string | null) => void; q: string; setQ: (q: string) => void; urgent: boolean; setUrgent: (u: boolean) => void }) {
+  const suggestions = q.trim() ? pros.filter((p) => matches(p, q) && (!urgent || (p.eta ?? 99) <= URGENT_ETA)).slice(0, 4) : []
   return (
     <div className="h-full overflow-y-auto no-scrollbar pb-28 bg-white">
       <header className="bg-navy-900 text-white px-5 pt-8 pb-16 rounded-b-[32px]">
@@ -57,9 +59,11 @@ function Home({ me, pros, go, pick, filter, q, setQ }: { me: User; pros: User[];
       <div className="relative mx-5 -mt-8 z-10">
         <form role="search" onSubmit={(e) => { e.preventDefault(); filter(null); go('map') }} className="flex items-center gap-3 bg-white rounded-2xl px-5 py-4 shadow-[0_12px_32px_-8px_rgba(11,31,68,.35)] focus-within:ring-2 focus-within:ring-emerald transition">
           <span className="text-emerald shrink-0"><Icon n="search" /></span>
-          <input type="search" enterKeyHint="search" aria-label="Buscar serviço ou profissional" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Do que você precisa agora?" className="min-w-0 flex-1 bg-transparent outline-none font-semibold placeholder:text-navy-900/50 [&::-webkit-search-cancel-button]:hidden" />
-          {q ? <button type="button" onClick={() => setQ('')} aria-label="Limpar busca" className="w-7 h-7 rounded-full bg-navy-100 grid place-items-center shrink-0"><Icon n="x" className="w-3.5 h-3.5" /></button> : <span className="text-xs font-bold bg-urgent/15 text-urgent px-2 py-1 rounded-full shrink-0">URGENTE</span>}
+          <input type="search" enterKeyHint="search" aria-label="Buscar serviço ou profissional" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Do que você precisa?" className="min-w-0 flex-1 bg-transparent outline-none font-semibold placeholder:text-navy-900/50 [&::-webkit-search-cancel-button]:hidden" />
+          {q ? <button type="button" onClick={() => setQ('')} aria-label="Limpar busca" className="w-7 h-7 rounded-full bg-navy-100 grid place-items-center shrink-0"><Icon n="x" className="w-3.5 h-3.5" /></button> : null}
+          <button type="button" aria-pressed={urgent} onClick={() => setUrgent(!urgent)} title="Mostrar só quem chega em até 10 minutos" className={`flex items-center gap-1 text-xs font-extrabold px-2.5 py-1.5 rounded-full shrink-0 transition active:scale-95 ${urgent ? 'bg-urgent text-white shadow-md shadow-urgent/40' : 'bg-urgent/15 text-urgent'}`}><Icon n="bolt" className="w-3.5 h-3.5" />URGENTE</button>
         </form>
+        {urgent && !q.trim() && <p className="mt-2 px-1 text-xs font-bold text-urgent flex items-center gap-1"><Icon n="bolt" className="w-3.5 h-3.5" />Modo urgente: só profissionais a até {URGENT_ETA} min, do mais perto ao mais longe.</p>}
         {q.trim() && (
           <div className="absolute inset-x-0 top-full mt-2 bg-white rounded-2xl shadow-[0_16px_40px_-8px_rgba(11,31,68,.4)] overflow-hidden">
             {suggestions.map((p) => (
@@ -137,8 +141,8 @@ function ProPreview({ p, onClose, onProfile, onRequest }: { p: User; onClose: ()
 
 const SHEET_MIN = 330
 
-function MapScreen({ pros, pick, request, cat, setCat, q, setQ }: { pros: User[]; pick: (p: User) => void; request: (p: User) => void; cat: string | null; setCat: (c: string | null) => void; q: string; setQ: (q: string) => void }) {
-  const list = pros.filter((p) => (!cat || p.category === cat) && matches(p, q))
+function MapScreen({ pros, pick, request, cat, setCat, q, setQ, urgent, setUrgent }: { pros: User[]; pick: (p: User) => void; request: (p: User) => void; cat: string | null; setCat: (c: string | null) => void; q: string; setQ: (q: string) => void; urgent: boolean; setUrgent: (u: boolean) => void }) {
+  const list = pros.filter((p) => (!cat || p.category === cat) && matches(p, q) && (!urgent || (p.eta ?? 99) <= URGENT_ETA)).sort((a, b) => (urgent ? (a.eta ?? 0) - (b.eta ?? 0) : 0))
   const [sel, setSel] = useState<string | null>(null)
   const [preview, setPreview] = useState<User | null>(null)
   const [full, setFull] = useState(false)
@@ -188,15 +192,16 @@ function MapScreen({ pros, pick, request, cat, setCat, q, setQ }: { pros: User[]
           <span className="flex items-center gap-1 text-xs font-bold text-emerald-dark shrink-0 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-emerald animate-pulse" />{list.length} ao vivo</span>
         </form>
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          <button onClick={() => setUrgent(!urgent)} aria-pressed={urgent} className={`shrink-0 flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-extrabold shadow transition ${urgent ? 'bg-urgent text-white' : 'bg-white text-urgent'}`}><Icon n="bolt" className="w-3.5 h-3.5" />Urgente</button>
           {[null, ...CATS].map((c) => <button key={c ?? 'all'} onClick={() => setCat(c)} className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-extrabold shadow transition ${cat === c ? 'bg-navy-900 text-white' : 'bg-white'}`}>{c ?? 'Todos'}</button>)}
         </div>
       </div>
       <div className={`absolute bottom-0 inset-x-0 z-10 flex flex-col bg-white rounded-t-[28px] shadow-[0_-12px_32px_-12px_rgba(11,31,68,.35)] ${dragH === null ? 'transition-[height] duration-300 ease-out' : ''}`} style={{ height }}>
         <div role="button" tabIndex={0} aria-label={full ? 'Recolher lista' : 'Expandir lista'} aria-expanded={full} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setFull((f) => !f) }} style={{ touchAction: 'none' }} className="shrink-0 cursor-grab active:cursor-grabbing select-none pt-3 pb-3">
           <div className="mx-auto w-10 h-1.5 rounded-full bg-navy-100 mb-3" />
-          <div className="px-5 flex items-center justify-between"><p className="font-extrabold">Profissionais encontrados <span className="text-navy-900/40 font-bold">· {list.length}</span></p><span className="text-xs font-extrabold text-emerald-dark">{full ? 'Ver mapa' : 'Ver lista'}</span></div>
+          <div className="px-5 flex items-center justify-between"><p className="font-extrabold">Profissionais encontrados <span className="text-navy-900/40 font-bold">· {list.length}</span></p><span className="text-xs font-extrabold text-emerald-dark whitespace-nowrap">{full ? 'Ver mapa' : 'Ver lista'}</span></div>
         </div>
-        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">{q.trim() ? `Nenhum profissional encontrado para “${q.trim()}”.` : 'Nenhum profissional disponível agora nesta categoria.'}</p> : full ? (
+        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">{q.trim() ? `Nenhum profissional encontrado para “${q.trim()}”.` : urgent ? `Ninguém a até ${URGENT_ETA} min agora. Desligue o modo urgente para ver todos.` : 'Nenhum profissional disponível agora nesta categoria.'}</p> : full ? (
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-28 space-y-3 pt-1">
             {list.map((p) => <ProCard key={p.id} p={p} wide active={active === p.id} onOpen={() => open(p)} />)}
           </div>
@@ -228,12 +233,14 @@ function PayOption({ on, onClick, title, sub }: { on: boolean; onClick: () => vo
   )
 }
 
-function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClose: () => void; onDone: () => void }) {
+function RequestSheet({ pro, me, urgentDefault, onClose, onDone }: { pro: User; me: User; urgentDefault: boolean; onClose: () => void; onDone: () => void }) {
   const dt = useMemo(defaultDateTime, [])
   const [desc, setDesc] = useState('')
   const [date, setDate] = useState(dt.date)
   const [time, setTime] = useState(dt.time)
-  const [wait, setWait] = useState(60)
+  const [urgent, setUrgent] = useState(urgentDefault)
+  const [wait, setWait] = useState(urgentDefault ? 10 : 60)
+  const toggleUrgent = () => { setUrgent(!urgent); setWait(!urgent ? 10 : 60) }
   const defAddr = me.addresses?.find((a) => a.isDefault) ?? me.addresses?.[0]
   const [addr, setAddr] = useState(defAddr ? fmtAddress(defAddr) : '')
   const defCard = me.cards?.find((c) => c.isDefault) ?? me.cards?.[0]
@@ -243,13 +250,13 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
   const field = 'w-full rounded-2xl bg-navy-100/70 px-4 py-3 font-semibold outline-none focus:ring-2 focus:ring-emerald'
 
   function send() {
-    const at = new Date(`${date}T${time}`)
+    const at = urgent ? new Date(Date.now() + (pro.eta ?? 10) * 60_000) : new Date(`${date}T${time}`)
     if (!desc.trim()) return setErr('Descreva rapidamente o que você precisa.')
     if (!addr.trim()) return setErr('Informe o endereço do serviço.')
-    if (isNaN(at.getTime()) || at.getTime() < Date.now()) return setErr('Escolha uma data e hora no futuro.')
+    if (!urgent && (isNaN(at.getTime()) || at.getTime() < Date.now())) return setErr('Escolha uma data e hora no futuro.')
     const card = pay.startsWith('card:') ? me.cards?.find((c) => c.id === pay.slice(5)) : undefined
     const payLabel = card ? cardLabel(card) : pay === 'pix' ? 'Pix' : 'Dinheiro'
-    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim(), payment: payLabel })
+    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim(), payment: payLabel, urgent })
     onDone()
   }
   if (newCard) return <CardForm holderHint={me.name} onClose={() => setNewCard(false)} onSave={(c) => { setPay(`card:${addCard(me.id, c)}`); setNewCard(false) }} />
@@ -263,6 +270,11 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
       <div className="mt-5 space-y-4">
         <label className="block"><span className="text-xs font-bold text-navy-900/60">O QUE PRECISA SER FEITO?</span>
           <textarea rows={2} className={`${field} mt-1.5 resize-none`} placeholder="Ex.: chuveiro não esquenta, disjuntor desarma…" value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
+        <button type="button" role="switch" aria-checked={urgent} onClick={toggleUrgent} className={`w-full text-left rounded-2xl px-4 py-3 flex items-center gap-3 border-2 transition ${urgent ? 'border-urgent bg-urgent/10' : 'border-transparent bg-navy-100/60'}`}>
+          <span className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${urgent ? 'bg-urgent text-white' : 'bg-white text-urgent'}`}><Icon n="bolt" className="w-5 h-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block font-extrabold leading-tight">Chamado urgente</span><span className="block text-xs text-navy-900/55">{urgent ? `Atendimento imediato: ${pro.name.split(' ')[0]} é avisado agora e chega em cerca de ${pro.eta} min` : 'Peça atendimento imediato e avise o profissional com prioridade'}</span></span>
+          <span className={`relative w-12 h-7 rounded-full transition shrink-0 ${urgent ? 'bg-urgent' : 'bg-navy-900/20'}`}><span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${urgent ? 'left-[22px]' : 'left-0.5'}`} /></span>
+        </button>
         <label className="block"><span className="text-xs font-bold text-navy-900/60">ENDEREÇO</span>
           {!!me.addresses?.length && <div className="flex gap-2 mt-1.5 flex-wrap">{me.addresses.map((a) => <button type="button" key={a.id} onClick={() => setAddr(fmtAddress(a))} className={`px-3.5 py-2 rounded-full text-sm font-extrabold transition ${addr === fmtAddress(a) ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{a.label}</button>)}</div>}
           <input className={`${field} mt-1.5`} placeholder="Rua, número, bairro" value={addr} onChange={(e) => setAddr(e.target.value)} /></label>
@@ -275,19 +287,19 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
             <button type="button" onClick={() => setNewCard(true)} className="w-full rounded-2xl border-2 border-dashed border-navy-100 py-3 text-sm font-extrabold text-navy-900/70 hover:border-emerald transition">+ Cadastrar cartão de crédito/débito</button>
           </div>
         </div>
-        <div>
+        {!urgent && <div>
           <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="cal" className="w-4 h-4" />QUANDO O SERVIÇO DEVE ACONTECER?</span>
           <div className="grid grid-cols-2 gap-3 mt-1.5">
             <input type="date" className={field} value={date} onChange={(e) => setDate(e.target.value)} />
             <input type="time" className={field} value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
-        </div>
+        </div>}
         <div>
           <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="clock" className="w-4 h-4" />ESPERAR A RESPOSTA ATÉ…</span>
           <div className="flex gap-2 mt-1.5 flex-wrap">
-            {WAITS.map((w) => <button key={w.m} onClick={() => setWait(w.m)} className={`px-4 py-2.5 rounded-full text-sm font-extrabold transition ${wait === w.m ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{w.l}{w.m === 60 && wait !== 60 ? '' : ''}</button>)}
+            {(urgent ? URGENT_WAITS : WAITS).map((w) => <button key={w.m} type="button" onClick={() => setWait(w.m)} className={`px-4 py-2.5 rounded-full text-sm font-extrabold transition ${wait === w.m ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{w.l}{w.m === 60 && wait !== 60 ? '' : ''}</button>)}
           </div>
-          <p className="text-xs text-navy-900/50 mt-2">Se {pro.name.split(' ')[0]} não responder nesse prazo, o pedido expira automaticamente. Padrão: 1 hora.</p>
+          <p className="text-xs text-navy-900/50 mt-2">Se {pro.name.split(' ')[0]} não responder nesse prazo, o pedido expira automaticamente. {urgent ? 'Padrão no modo urgente: 10 minutos.' : 'Padrão: 1 hora.'}</p>
         </div>
         {err && <p role="alert" className="text-sm font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</p>}
         <button onClick={send} className="w-full rounded-2xl py-4 font-extrabold text-white text-lg bg-emerald hover:bg-emerald-dark active:scale-95 transition shadow-lg shadow-emerald/40">Enviar solicitação</button>
@@ -348,6 +360,7 @@ function OrderCard({ r, now, onReview }: { r: Request; now: number; onReview: ()
         <div className="flex-1 min-w-0"><p className="font-extrabold truncate">{pro?.name}</p><p className="text-sm text-navy-900/60">{r.category}</p></div>
         <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full ${st.c}`}>{st.l}</span>
       </div>
+      {r.urgent && <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-extrabold bg-urgent text-white px-2.5 py-1 rounded-full"><Icon n="bolt" className="w-3 h-3" />CHAMADO URGENTE</p>}
       <p className="text-sm mt-3 text-navy-900/80">{r.description}</p>
       <p className="flex items-center gap-1.5 text-sm font-bold mt-2"><Icon n="cal" className="w-4 h-4 text-emerald-dark" />{fmtWhen(r.serviceAt)}</p>
       {r.status === 'pending' && (
@@ -456,6 +469,7 @@ export default function ClientApp({ me }: { me: User }) {
   const [reqPro, setReqPro] = useState<User | null>(null)
   const [cat, setCat] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [urgent, setUrgent] = useState(false)
   const pros = users.filter((u) => u.role === 'pro' && u.online)
   const pending = requests.filter((r) => r.clientId === me.id && (r.status === 'pending' || needsReview(r))).length
   const nav: { t: Tab; l: string; i: string }[] = [{ t: 'home', l: 'Início', i: 'home' }, { t: 'map', l: 'Mapa', i: 'pin' }, { t: 'orders', l: 'Pedidos', i: 'list' }, { t: 'me', l: 'Perfil', i: 'user' }]
@@ -463,14 +477,14 @@ export default function ClientApp({ me }: { me: User }) {
   return (
     <div className="h-full relative">
       <main className="h-full">
-        {view === 'home' && <Home me={me} pros={pros} go={setTab} pick={setPro} filter={setCat} q={q} setQ={setQ} />}
-        {view === 'map' && <MapScreen pros={pros} pick={setPro} request={setReqPro} cat={cat} setCat={setCat} q={q} setQ={setQ} />}
+        {view === 'home' && <Home me={me} pros={pros} go={setTab} pick={setPro} filter={setCat} q={q} setQ={setQ} urgent={urgent} setUrgent={setUrgent} />}
+        {view === 'map' && <MapScreen pros={pros} pick={setPro} request={setReqPro} cat={cat} setCat={setCat} q={q} setQ={setQ} urgent={urgent} setUrgent={setUrgent} />}
         {view === 'pro' && pro && <Profile p={pro} back={() => setPro(null)} request={() => setReqPro(pro)} />}
         {view === 'orders' && <Orders />}
         {view === 'me' && <Me me={me} />}
       </main>
       <Sheet open={!!reqPro} onClose={() => setReqPro(null)}>
-        {reqPro && <RequestSheet pro={reqPro} me={me} onClose={() => setReqPro(null)} onDone={() => { setReqPro(null); setPro(null); setTab('orders') }} />}
+        {reqPro && <RequestSheet pro={reqPro} me={me} urgentDefault={urgent} onClose={() => setReqPro(null)} onDone={() => { setReqPro(null); setPro(null); setTab('orders') }} />}
       </Sheet>
       <nav className="absolute bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-navy-100 grid grid-cols-4 px-2 pt-2 pb-4">
         {nav.map((n) => (
