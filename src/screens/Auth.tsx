@@ -58,53 +58,45 @@ export function Auth({ role, back }: { role: Role; back: () => void }) {
   }
   const demo = () => { setMode('login'); setF((s) => ({ ...s, email: pro ? 'prestador@resolveja.com' : 'cliente@resolveja.com', password: '123456' })); setErr(null) }
 
-  const field = 'w-full rounded-2xl bg-navy-100/70 pl-12 pr-4 py-3.5 font-semibold outline-none focus:ring-2 focus:ring-emerald placeholder:text-navy-900/35'
-  const plain = field.replace('pl-12', 'px-4')
-  const iconCls = 'absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-navy-900/40 pointer-events-none'
+  const field = 'w-full rounded-2xl bg-navy-100/70 px-4 py-3.5 font-semibold outline-none focus:ring-2 focus:ring-emerald placeholder:text-navy-900/35'
   return (
-    <div className="h-full overflow-y-auto no-scrollbar bg-gradient-to-b from-white to-navy-100/40">
-      <div className="min-h-full flex flex-col">
-        <div className={`${pro ? 'bg-navy-950' : 'bg-navy-900'} text-white px-6 pt-8 pb-16 rounded-b-[32px] relative`}>
-          <button onClick={back} aria-label="Voltar" className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 transition grid place-items-center"><Icon n="back" /></button>
-          <div className="flex items-center gap-4 mt-5">
-            <Logo className="w-14 shrink-0" />
-            <div>
-              <p className={`text-xs font-extrabold tracking-widest ${pro ? 'text-urgent' : 'text-emerald'}`}>{pro ? 'ÁREA DO PRESTADOR' : 'ÁREA DO CLIENTE'}</p>
-              <h1 className="text-2xl font-extrabold leading-tight">{mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}</h1>
-            </div>
+    <div className="h-full overflow-y-auto no-scrollbar bg-white">
+      <div className={`${pro ? 'bg-navy-950' : 'bg-navy-900'} text-white px-6 pt-8 pb-14 rounded-b-[32px] relative`}>
+        <button onClick={back} aria-label="Voltar" className="w-10 h-10 rounded-full bg-white/10 grid place-items-center"><Icon n="back" /></button>
+        <div className="flex items-center gap-4 mt-5">
+          <Logo className="w-14" />
+          <div>
+            <p className={`text-xs font-extrabold tracking-widest ${pro ? 'text-urgent' : 'text-emerald'}`}>{pro ? 'ÁREA DO PRESTADOR' : 'ÁREA DO CLIENTE'}</p>
+            <h1 className="text-2xl font-extrabold">{mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}</h1>
           </div>
         </div>
-        <form onSubmit={submit} className="relative z-10 flex-1 flex flex-col px-6 -mt-8 pb-8">
-          <div className="bg-white rounded-3xl p-5 shadow-[0_16px_40px_-12px_rgba(11,31,68,.35)] space-y-3">
-            <div className="grid grid-cols-2 bg-navy-100/70 rounded-2xl p-1 text-sm font-bold">
-              {(['login', 'signup'] as const).map((m) => (
-                <button type="button" key={m} onClick={() => { setMode(m); setErr(null) }} className={`py-2.5 rounded-xl transition ${mode === m ? 'bg-white shadow text-navy-900' : 'text-navy-900/50'}`}>{m === 'login' ? 'Entrar' : 'Cadastrar'}</button>
-              ))}
-            </div>
-            {mode === 'signup' && <div className="relative"><Icon n="user" className={iconCls} /><input required className={field} placeholder="Nome completo" value={f.name} onChange={(e) => up('name', e.target.value)} /></div>}
-            <div className="relative"><Icon n="mail" className={iconCls} /><input required type="email" autoComplete="email" className={field} placeholder="E-mail" value={f.email} onChange={(e) => up('email', e.target.value)} /></div>
-            <div className="relative"><Icon n="lock" className={iconCls} /><input required type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className={field} placeholder="Senha" value={f.password} onChange={(e) => up('password', e.target.value)} /></div>
-            {mode === 'signup' && pro && (
-              <>
-                <p className="text-xs font-bold text-navy-900/50 pt-1">SUA ESPECIALIDADE</p>
-                <div className="flex flex-wrap gap-2">
-                  {CATS.map((c) => <button type="button" key={c} onClick={() => up('category', c)} className={`px-3.5 py-2 rounded-full text-sm font-bold transition ${f.category === c ? 'bg-urgent text-white' : 'bg-navy-100/70'}`}>{c}</button>)}
-                </div>
-                <div className="flex items-center gap-2"><span className="font-bold text-sm">Preço base R$</span><input type="number" min={20} className={`${plain} !w-28`} value={f.price} onChange={(e) => up('price', e.target.value)} /></div>
-              </>
-            )}
-            {err && <p role="alert" className="text-sm font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</p>}
-            <button className={`w-full rounded-2xl py-4 font-extrabold text-white text-lg shadow-lg active:scale-95 transition ${accent}`}>{mode === 'login' ? 'Entrar' : 'Criar conta e entrar'}</button>
-          </div>
-          <div className="flex items-center gap-3 mt-6 text-xs font-bold text-navy-900/40">
-            <span className="flex-1 h-px bg-navy-900/10" />OU<span className="flex-1 h-px bg-navy-900/10" />
-          </div>
-          <button type="button" onClick={demo} className="mt-4 w-full rounded-2xl bg-white border border-navy-100 shadow-sm py-3.5 text-sm font-bold text-navy-900/80 hover:border-emerald transition">
-            Usar conta de demonstração {pro ? '(Marcos, eletricista)' : '(Rafael)'}
-          </button>
-          <p className="mt-auto pt-8 text-center text-xs text-navy-900/40">Protótipo · dados de demonstração</p>
-        </form>
       </div>
+      <form onSubmit={submit} className="px-6 -mt-6 pb-10">
+        <div className="bg-white rounded-3xl p-5 shadow-[0_16px_40px_-12px_rgba(11,31,68,.35)] space-y-3">
+          <div className="grid grid-cols-2 bg-navy-100/70 rounded-2xl p-1 text-sm font-bold">
+            {(['login', 'signup'] as const).map((m) => (
+              <button type="button" key={m} onClick={() => { setMode(m); setErr(null) }} className={`py-2.5 rounded-xl transition ${mode === m ? 'bg-white shadow text-navy-900' : 'text-navy-900/50'}`}>{m === 'login' ? 'Entrar' : 'Cadastrar'}</button>
+            ))}
+          </div>
+          {mode === 'signup' && <input required className={field} placeholder="Nome completo" value={f.name} onChange={(e) => up('name', e.target.value)} />}
+          <input required type="email" className={field} placeholder="E-mail" value={f.email} onChange={(e) => up('email', e.target.value)} />
+          <input required type="password" className={field} placeholder="Senha" value={f.password} onChange={(e) => up('password', e.target.value)} />
+          {mode === 'signup' && pro && (
+            <>
+              <p className="text-xs font-bold text-navy-900/50 pt-1">SUA ESPECIALIDADE</p>
+              <div className="flex flex-wrap gap-2">
+                {CATS.map((c) => <button type="button" key={c} onClick={() => up('category', c)} className={`px-3.5 py-2 rounded-full text-sm font-bold transition ${f.category === c ? 'bg-urgent text-white' : 'bg-navy-100/70'}`}>{c}</button>)}
+              </div>
+              <div className="flex items-center gap-2"><span className="font-bold text-sm">Preço base R$</span><input type="number" min={20} className={`${field} !w-28`} value={f.price} onChange={(e) => up('price', e.target.value)} /></div>
+            </>
+          )}
+          {err && <p role="alert" className="text-sm font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</p>}
+          <button className={`w-full rounded-2xl py-4 font-extrabold text-white text-lg shadow-lg active:scale-95 transition ${accent}`}>{mode === 'login' ? 'Entrar' : 'Criar conta e entrar'}</button>
+        </div>
+        <button type="button" onClick={demo} className="mt-5 w-full rounded-2xl border-2 border-dashed border-navy-100 py-3 text-sm font-bold text-navy-900/70 hover:border-emerald transition">
+          Usar conta de demonstração {pro ? '(Marcos, eletricista)' : '(Rafael)'}
+        </button>
+      </form>
     </div>
   )
 }
