@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
 import { Avatar, catIcon, Icon, MapSvg, Sheet, Star, STATUS_LABEL } from '../components/ui'
-import { AddressSection, cardLabel, PaymentSection, PhotoPicker } from '../components/Account'
-import { brl, createRequest, fmtAddress, fmtCountdown, fmtWhen, logout, needsReview, reviewRequest, setStatus, useDB, useNow, userById, type Request, type User } from '../lib/store'
+import { AddressSection, CardForm, cardLabel, PaymentSection, PhotoPicker } from '../components/Account'
+import { addCard, brl, createRequest, fmtAddress, fmtCountdown, fmtWhen, logout, needsReview, reviewRequest, setStatus, useDB, useNow, userById, type Request, type User } from '../lib/store'
 
 type Tab = 'home' | 'map' | 'orders' | 'me'
 const CATS = ['Eletricista', 'Encanador', 'Diarista', 'Montador', 'Frete']
@@ -9,9 +9,9 @@ const WAITS = [{ m: 15, l: '15 min' }, { m: 30, l: '30 min' }, { m: 60, l: '1 ho
 
 const Stars = ({ n, className = 'w-3.5 h-3.5' }: { n: number; className?: string }) => <span className="flex">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= n ? '' : 'opacity-20 grayscale'}><Star className={className} /></span>)}</span>
 
-function ProCard({ p, onOpen, active }: { p: User; onOpen: () => void; active: boolean }) {
+function ProCard({ p, onOpen, active, wide }: { p: User; onOpen: () => void; active: boolean; wide?: boolean }) {
   return (
-    <button onClick={onOpen} className={`snap-center shrink-0 w-[78%] text-left bg-white rounded-2xl p-3 shadow-[0_8px_24px_-8px_rgba(11,31,68,.35)] border-2 transition ${active ? 'border-emerald' : 'border-transparent'}`}>
+    <button onClick={onOpen} className={`${wide ? 'w-full' : 'snap-center shrink-0 w-[78%]'} text-left bg-white rounded-2xl p-3 shadow-[0_8px_24px_-8px_rgba(11,31,68,.35)] border-2 transition ${active ? 'border-emerald' : 'border-transparent'}`}>
       <div className="flex gap-3">
         <Avatar name={p.name} photo={p.photo} className="w-20 h-20" />
         <div className="min-w-0 flex-1">
@@ -76,45 +76,107 @@ function Home({ me, pros, go, pick, filter }: { me: User; pros: User[]; go: (t: 
   )
 }
 
-function MapScreen({ pros, pick, cat, setCat }: { pros: User[]; pick: (p: User) => void; cat: string | null; setCat: (c: string | null) => void }) {
+function ProPreview({ p, onClose, onProfile, onRequest }: { p: User; onClose: () => void; onProfile: () => void; onRequest: () => void }) {
+  const { requests } = useDB()
+  const last = requests.filter((r) => r.proId === p.id && r.review?.comment).sort((a, b) => b.review!.at - a.review!.at)[0]
+  return (
+    <>
+      <div className="flex items-start gap-4">
+        <Avatar name={p.name} photo={p.photo} className="w-24 h-24 !rounded-2xl" />
+        <div className="min-w-0 flex-1">
+          <span className="inline-flex items-center gap-1 bg-emerald/15 text-emerald-dark text-[11px] font-extrabold px-2.5 py-1 rounded-full"><Icon n="shield" className="w-3.5 h-3.5" />Identidade verificada</span>
+          <p className="font-extrabold text-xl leading-tight mt-1.5 truncate">{p.name}</p>
+          <p className="text-sm text-navy-900/60">{p.category}</p>
+          <p className="flex items-center gap-1 text-sm font-bold mt-0.5"><Star />{p.rating?.toFixed(1)}<span className="font-medium text-navy-900/50">({p.jobs} serviços)</span></p>
+        </div>
+        <button onClick={onClose} aria-label="Fechar" className="w-9 h-9 rounded-full bg-navy-100 grid place-items-center shrink-0"><Icon n="x" className="w-4 h-4" /></button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="rounded-2xl bg-emerald/10 text-emerald-dark px-3 py-2.5 text-sm font-bold flex items-center gap-2"><Icon n="car" className="w-5 h-5" />A {p.eta} min de você</div>
+        <div className="rounded-2xl bg-navy-100/60 px-3 py-2"><p className="text-[10px] font-bold text-navy-900/50 leading-none">A PARTIR DE</p><p className="font-extrabold text-lg leading-tight">{brl(p.price ?? 0)}</p></div>
+      </div>
+      {last && <p className="mt-3 text-sm text-navy-900/70 italic line-clamp-2">“{last.review!.comment}”</p>}
+      <div className="grid grid-cols-5 gap-2 mt-5">
+        <button onClick={onProfile} className="col-span-2 rounded-2xl py-4 font-extrabold bg-navy-100 hover:bg-navy-100/70 active:scale-95 transition">Ver perfil</button>
+        <button onClick={onRequest} className="col-span-3 rounded-2xl py-4 font-extrabold text-white bg-emerald hover:bg-emerald-dark active:scale-95 transition shadow-lg shadow-emerald/40">Solicitar serviço</button>
+      </div>
+    </>
+  )
+}
+
+const SHEET_MIN = 330
+
+function MapScreen({ pros, pick, request, cat, setCat }: { pros: User[]; pick: (p: User) => void; request: (p: User) => void; cat: string | null; setCat: (c: string | null) => void }) {
   const list = pros.filter((p) => !cat || p.category === cat)
   const [sel, setSel] = useState<string | null>(null)
+  const [preview, setPreview] = useState<User | null>(null)
+  const [full, setFull] = useState(false)
+  const [dragH, setDragH] = useState<number | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const gesture = useRef<{ y: number; h: number; moved: boolean } | null>(null)
   const active = sel ?? list[0]?.id
+  const maxH = Math.max(SHEET_MIN + 80, (box.current?.clientHeight ?? 760) - 112)
+  const height = dragH ?? (full ? maxH : SHEET_MIN)
+  const open = (p: User) => { setSel(p.id); setPreview(p) }
+
+  const down = (e: RPointerEvent) => { e.currentTarget.setPointerCapture(e.pointerId); gesture.current = { y: e.clientY, h: height, moved: false } }
+  const move = (e: RPointerEvent) => {
+    const g = gesture.current; if (!g) return
+    if (Math.abs(e.clientY - g.y) > 4) g.moved = true
+    if (g.moved) setDragH(Math.min(maxH, Math.max(SHEET_MIN, g.h + (g.y - e.clientY))))
+  }
+  const up = () => {
+    const g = gesture.current; gesture.current = null
+    if (!g) return
+    if (!g.moved) setFull((f) => !f)
+    else { const d = (dragH ?? g.h) - g.h; if (d > 50) setFull(true); else if (d < -50) setFull(false) }
+    setDragH(null)
+  }
+
   return (
-    <div className="h-full flex flex-col bg-navy-100">
-      <div className="relative flex-1 min-h-0">
+    <div ref={box} className="h-full relative overflow-hidden bg-navy-100">
+      <div className="absolute inset-x-0 top-0" style={{ bottom: SHEET_MIN - 24 }}>
         <MapSvg>
           <circle cx="180" cy="200" r="34" fill="#2563eb" opacity=".15" className="pulse-ring" style={{ transformOrigin: '180px 200px' }} />
           <circle cx="180" cy="200" r="9" fill="#2563eb" stroke="#fff" strokeWidth="4" />
           <text x="180" y="226" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0b1f44">Você</text>
         </MapSvg>
         {list.map((p) => (
-          <button key={p.id} onClick={() => setSel(p.id)} aria-label={p.name} style={{ left: `${((p.x ?? 0) / 360) * 100}%`, top: `${((p.y ?? 0) / 340) * 100}%` }} className={`absolute -translate-x-1/2 -translate-y-full transition ${active === p.id ? 'scale-125 z-10' : ''}`}>
+          <button key={p.id} onClick={() => open(p)} aria-label={`Ver ${p.name}`} style={{ left: `${((p.x ?? 0) / 360) * 100}%`, top: `${((p.y ?? 0) / 340) * 100}%` }} className={`absolute -translate-x-1/2 -translate-y-full transition ${active === p.id ? 'scale-125 z-10' : ''}`}>
             <span className={`block w-11 h-11 rounded-full rounded-bl-none rotate-[-45deg] overflow-hidden border-[3px] shadow-lg bg-navy-800 ${active === p.id ? 'border-emerald' : 'border-navy-900'}`}>
               {p.photo ? <img src={p.photo} alt="" className="w-full h-full object-cover rotate-45 scale-150" /> : <span className="grid place-items-center w-full h-full text-white font-extrabold rotate-45">{p.name[0]}</span>}
             </span>
           </button>
         ))}
-        <div className="absolute top-4 inset-x-4 space-y-2">
-          <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 shadow-[0_8px_24px_-6px_rgba(11,31,68,.4)]">
-            <span className="text-emerald"><Icon n="search" className="w-5 h-5" /></span>
-            <span className="font-bold text-sm">{cat ?? 'Todos os serviços'} · São Gonçalo</span>
-            <span className="ml-auto flex items-center gap-1 text-xs font-bold text-emerald-dark"><span className="w-2 h-2 rounded-full bg-emerald animate-pulse" />{list.length} ao vivo</span>
-          </div>
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {[null, ...CATS].map((c) => <button key={c ?? 'all'} onClick={() => setCat(c)} className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-extrabold shadow transition ${cat === c ? 'bg-navy-900 text-white' : 'bg-white'}`}>{c ?? 'Todos'}</button>)}
-          </div>
+      </div>
+      <div className="absolute top-4 inset-x-4 space-y-2 z-20">
+        <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 shadow-[0_8px_24px_-6px_rgba(11,31,68,.4)]">
+          <span className="text-emerald"><Icon n="search" className="w-5 h-5" /></span>
+          <span className="font-bold text-sm">{cat ?? 'Todos os serviços'} · São Gonçalo</span>
+          <span className="ml-auto flex items-center gap-1 text-xs font-bold text-emerald-dark"><span className="w-2 h-2 rounded-full bg-emerald animate-pulse" />{list.length} ao vivo</span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {[null, ...CATS].map((c) => <button key={c ?? 'all'} onClick={() => setCat(c)} className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-extrabold shadow transition ${cat === c ? 'bg-navy-900 text-white' : 'bg-white'}`}>{c ?? 'Todos'}</button>)}
         </div>
       </div>
-      <div className="relative -mt-6 bg-white rounded-t-[28px] pt-3 pb-24 shadow-[0_-12px_32px_-12px_rgba(11,31,68,.35)]">
-        <div className="mx-auto w-10 h-1.5 rounded-full bg-navy-100 mb-3" />
-        <p className="px-5 font-extrabold mb-3">Profissionais encontrados</p>
-        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">Nenhum profissional disponível agora nesta categoria.</p> : (
-          <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x px-5">
-            {list.map((p) => <ProCard key={p.id} p={p} active={active === p.id} onOpen={() => (active === p.id ? pick(p) : setSel(p.id))} />)}
+      <div className={`absolute bottom-0 inset-x-0 z-10 flex flex-col bg-white rounded-t-[28px] shadow-[0_-12px_32px_-12px_rgba(11,31,68,.35)] ${dragH === null ? 'transition-[height] duration-300 ease-out' : ''}`} style={{ height }}>
+        <div role="button" tabIndex={0} aria-label={full ? 'Recolher lista' : 'Expandir lista'} aria-expanded={full} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setFull((f) => !f) }} style={{ touchAction: 'none' }} className="shrink-0 cursor-grab active:cursor-grabbing select-none pt-3 pb-3">
+          <div className="mx-auto w-10 h-1.5 rounded-full bg-navy-100 mb-3" />
+          <div className="px-5 flex items-center justify-between"><p className="font-extrabold">Profissionais encontrados <span className="text-navy-900/40 font-bold">· {list.length}</span></p><span className="text-xs font-extrabold text-emerald-dark">{full ? 'Ver mapa' : 'Ver lista'}</span></div>
+        </div>
+        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">Nenhum profissional disponível agora nesta categoria.</p> : full ? (
+          <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-28 space-y-3 pt-1">
+            {list.map((p) => <ProCard key={p.id} p={p} wide active={active === p.id} onOpen={() => open(p)} />)}
+          </div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x px-5 pb-24">
+            {list.map((p) => <ProCard key={p.id} p={p} active={active === p.id} onOpen={() => open(p)} />)}
           </div>
         )}
       </div>
+      <Sheet open={!!preview} onClose={() => setPreview(null)}>
+        {preview && <ProPreview p={preview} onClose={() => setPreview(null)} onProfile={() => { const p = preview; setPreview(null); pick(p) }} onRequest={() => { const p = preview; setPreview(null); request(p) }} />}
+      </Sheet>
     </div>
   )
 }
@@ -123,6 +185,15 @@ function defaultDateTime() {
   const d = new Date(Date.now() + 2 * 3600_000); d.setMinutes(0, 0, 0)
   const pad = (n: number) => String(n).padStart(2, '0')
   return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:00` }
+}
+
+function PayOption({ on, onClick, title, sub }: { on: boolean; onClick: () => void; title: string; sub: string }) {
+  return (
+    <button type="button" role="radio" aria-checked={on} onClick={onClick} className={`w-full text-left rounded-2xl px-4 py-3 flex items-center gap-3 border-2 transition ${on ? 'border-emerald bg-emerald/5' : 'border-transparent bg-navy-100/60'}`}>
+      <span className={`w-5 h-5 rounded-full border-2 grid place-items-center shrink-0 ${on ? 'border-emerald' : 'border-navy-900/25'}`}>{on && <span className="w-2.5 h-2.5 rounded-full bg-emerald" />}</span>
+      <span className="min-w-0"><span className="block font-extrabold leading-tight">{title}</span><span className="block text-xs text-navy-900/55">{sub}</span></span>
+    </button>
+  )
 }
 
 function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClose: () => void; onDone: () => void }) {
@@ -134,7 +205,8 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
   const defAddr = me.addresses?.find((a) => a.isDefault) ?? me.addresses?.[0]
   const [addr, setAddr] = useState(defAddr ? fmtAddress(defAddr) : '')
   const defCard = me.cards?.find((c) => c.isDefault) ?? me.cards?.[0]
-  const [cardId, setCardId] = useState(defCard?.id ?? '')
+  const [pay, setPay] = useState<string>(defCard ? `card:${defCard.id}` : 'pix')
+  const [newCard, setNewCard] = useState(false)
   const [err, setErr] = useState('')
   const field = 'w-full rounded-2xl bg-navy-100/70 px-4 py-3 font-semibold outline-none focus:ring-2 focus:ring-emerald'
 
@@ -143,9 +215,12 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
     if (!desc.trim()) return setErr('Descreva rapidamente o que você precisa.')
     if (!addr.trim()) return setErr('Informe o endereço do serviço.')
     if (isNaN(at.getTime()) || at.getTime() < Date.now()) return setErr('Escolha uma data e hora no futuro.')
-    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim(), payment: me.cards?.find((c) => c.id === cardId) ? cardLabel(me.cards!.find((c) => c.id === cardId)!) : undefined })
+    const card = pay.startsWith('card:') ? me.cards?.find((c) => c.id === pay.slice(5)) : undefined
+    const payLabel = card ? cardLabel(card) : pay === 'pix' ? 'Pix' : 'Dinheiro'
+    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim(), payment: payLabel })
     onDone()
   }
+  if (newCard) return <CardForm holderHint={me.name} onClose={() => setNewCard(false)} onSave={(c) => { setPay(`card:${addCard(me.id, c)}`); setNewCard(false) }} />
   return (
     <>
       <div className="flex items-center gap-3">
@@ -161,9 +236,12 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
           <input className={`${field} mt-1.5`} placeholder="Rua, número, bairro" value={addr} onChange={(e) => setAddr(e.target.value)} /></label>
         <div>
           <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="wallet" className="w-4 h-4" />FORMA DE PAGAMENTO</span>
-          {me.cards?.length ? (
-            <div className="flex gap-2 mt-1.5 flex-wrap">{me.cards.map((c) => <button type="button" key={c.id} onClick={() => setCardId(c.id)} className={`px-3.5 py-2 rounded-full text-sm font-extrabold transition ${cardId === c.id ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{c.brand} {c.type === 'credit' ? 'créd.' : 'déb.'} {c.last4}</button>)}</div>
-          ) : <p className="text-xs text-navy-900/50 mt-1.5">Nenhum cartão cadastrado. Adicione em Perfil → Formas de pagamento, ou combine direto com o profissional.</p>}
+          <div className="mt-1.5 space-y-2" role="radiogroup" aria-label="Forma de pagamento">
+            {(me.cards ?? []).map((c) => <PayOption key={c.id} on={pay === `card:${c.id}`} onClick={() => setPay(`card:${c.id}`)} title={`${c.brand} •••• ${c.last4}`} sub={c.type === 'credit' ? 'Cartão de crédito' : 'Cartão de débito'} />)}
+            <PayOption on={pay === 'pix'} onClick={() => setPay('pix')} title="Pix" sub="Pague pelo app do seu banco depois que o profissional aceitar" />
+            <PayOption on={pay === 'cash'} onClick={() => setPay('cash')} title="Dinheiro" sub="Pague direto ao profissional no fim do serviço" />
+            <button type="button" onClick={() => setNewCard(true)} className="w-full rounded-2xl border-2 border-dashed border-navy-100 py-3 text-sm font-extrabold text-navy-900/70 hover:border-emerald transition">+ Cadastrar cartão de crédito/débito</button>
+          </div>
         </div>
         <div>
           <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="cal" className="w-4 h-4" />QUANDO O SERVIÇO DEVE ACONTECER?</span>
@@ -343,7 +421,7 @@ export default function ClientApp({ me }: { me: User }) {
   const { users, requests } = useDB()
   const [tab, setTab] = useState<Tab>('home')
   const [pro, setPro] = useState<User | null>(null)
-  const [req, setReq] = useState(false)
+  const [reqPro, setReqPro] = useState<User | null>(null)
   const [cat, setCat] = useState<string | null>(null)
   const pros = users.filter((u) => u.role === 'pro' && u.online)
   const pending = requests.filter((r) => r.clientId === me.id && (r.status === 'pending' || needsReview(r))).length
@@ -353,13 +431,13 @@ export default function ClientApp({ me }: { me: User }) {
     <div className="h-full relative">
       <main className="h-full">
         {view === 'home' && <Home me={me} pros={pros} go={setTab} pick={setPro} filter={setCat} />}
-        {view === 'map' && <MapScreen pros={pros} pick={setPro} cat={cat} setCat={setCat} />}
-        {view === 'pro' && pro && <Profile p={pro} back={() => setPro(null)} request={() => setReq(true)} />}
+        {view === 'map' && <MapScreen pros={pros} pick={setPro} request={setReqPro} cat={cat} setCat={setCat} />}
+        {view === 'pro' && pro && <Profile p={pro} back={() => setPro(null)} request={() => setReqPro(pro)} />}
         {view === 'orders' && <Orders />}
         {view === 'me' && <Me me={me} />}
       </main>
-      <Sheet open={req && !!pro} onClose={() => setReq(false)}>
-        {pro && <RequestSheet pro={pro} me={me} onClose={() => setReq(false)} onDone={() => { setReq(false); setPro(null); setTab('orders') }} />}
+      <Sheet open={!!reqPro} onClose={() => setReqPro(null)}>
+        {reqPro && <RequestSheet pro={reqPro} me={me} onClose={() => setReqPro(null)} onDone={() => { setReqPro(null); setPro(null); setTab('orders') }} />}
       </Sheet>
       <nav className="absolute bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-navy-100 grid grid-cols-4 px-2 pt-2 pb-4">
         {nav.map((n) => (
