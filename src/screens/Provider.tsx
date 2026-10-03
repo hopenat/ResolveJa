@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Avatar, Icon, MapSvg, STATUS_LABEL } from '../components/ui'
+import { AddressSection, PhotoPicker } from '../components/Account'
 import { brl, fmtCountdown, fmtWhen, logout, setStatus, toggleOnline, useDB, useNow, userById, type Request, type User } from '../lib/store'
 
 type Tab = 'dash' | 'jobs' | 'me'
@@ -102,15 +103,31 @@ function Jobs({ mine, now }: { mine: Request[]; now: number }) {
 
 function Me({ me, mine }: { me: User; mine: Request[] }) {
   const done = mine.filter((r) => r.status === 'done').length
+  const reviews = mine.filter((r) => r.review).sort((a, b) => b.review!.at - a.review!.at)
   return (
     <div className="h-full bg-navy-950 text-white pb-28 overflow-y-auto no-scrollbar">
       <header className="px-5 pt-10 pb-8 text-center">
-        <Avatar name={me.name} photo={me.photo} className="w-24 h-24 mx-auto !rounded-full ring-4 ring-urgent" />
+        <PhotoPicker user={me} ring="ring-urgent" />
         <h1 className="text-2xl font-extrabold mt-3">{me.name}</h1><p className="text-white/60 text-sm">{me.category} · {brl(me.price ?? 0)} base</p>
         <span className="inline-flex items-center gap-1 mt-2 bg-emerald/20 text-emerald text-xs font-extrabold px-3 py-1.5 rounded-full"><Icon n="shield" className="w-4 h-4" />Identidade Verificada</span>
       </header>
       <div className="px-5 grid grid-cols-3 gap-3 text-center">
         {[[me.rating?.toFixed(1) ?? '5.0', 'Nota'], [String((me.jobs ?? 0) + done), 'Serviços'], [String(mine.length), 'Chamados']].map(([v, l]) => <div key={l} className="rounded-2xl bg-white/5 border border-white/10 py-4"><p className="text-2xl font-extrabold">{v}</p><p className="text-xs text-white/50">{l}</p></div>)}
+      </div>
+      <div className="px-5">
+        <AddressSection user={me} dark />
+        <section className="mt-6">
+          <h2 className="font-extrabold text-lg mb-3">Avaliações recebidas</h2>
+          <div className="space-y-2.5">
+            {reviews.length === 0 && <p className="text-sm text-white/55">Ainda sem avaliações.</p>}
+            {reviews.map((r) => (
+              <article key={r.id} className="rounded-2xl p-4 bg-white/5 border border-white/10">
+                <div className="flex items-center justify-between"><p className="font-bold">{userById(r.clientId)?.name}</p><span className="font-extrabold text-amber-400">{'★'.repeat(r.review!.rating)}<span className="text-white/20">{'★'.repeat(5 - r.review!.rating)}</span></span></div>
+                {r.review!.comment && <p className="text-sm mt-1.5 text-white/75">{r.review!.comment}</p>}
+              </article>
+            ))}
+          </div>
+        </section>
       </div>
       <div className="p-5"><button onClick={logout} className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 font-extrabold bg-white/10 hover:bg-white/15"><Icon n="out" className="w-5 h-5" />Sair da conta</button></div>
     </div>

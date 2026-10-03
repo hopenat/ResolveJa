@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Avatar, catIcon, Icon, MapSvg, Sheet, Star, STATUS_LABEL } from '../components/ui'
-import { brl, createRequest, fmtCountdown, fmtWhen, logout, setStatus, useDB, useNow, userById, type Request, type User } from '../lib/store'
+import { AddressSection, cardLabel, PaymentSection, PhotoPicker } from '../components/Account'
+import { brl, createRequest, fmtAddress, fmtCountdown, fmtWhen, logout, needsReview, reviewRequest, setStatus, useDB, useNow, userById, type Request, type User } from '../lib/store'
 
 type Tab = 'home' | 'map' | 'orders' | 'me'
 const CATS = ['Eletricista', 'Encanador', 'Diarista', 'Montador', 'Frete']
 const WAITS = [{ m: 15, l: '15 min' }, { m: 30, l: '30 min' }, { m: 60, l: '1 hora' }, { m: 120, l: '2 horas' }, { m: 240, l: '4 horas' }]
+
+const Stars = ({ n, className = 'w-3.5 h-3.5' }: { n: number; className?: string }) => <span className="flex">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= n ? '' : 'opacity-20 grayscale'}><Star className={className} /></span>)}</span>
 
 function ProCard({ p, onOpen, active }: { p: User; onOpen: () => void; active: boolean }) {
   return (
@@ -32,7 +35,7 @@ function Home({ me, pros, go, pick, filter }: { me: User; pros: User[]; go: (t: 
             <p className="text-sm text-navy-100/70">Olá, {me.name.split(' ')[0]} 👋</p>
             <p className="flex items-center gap-1 font-bold text-lg mt-0.5"><span className="text-emerald"><Icon n="pin" className="w-5 h-5" /></span>São Gonçalo, RJ</p>
           </div>
-          <button onClick={() => go('me')} aria-label="Perfil" className="w-11 h-11 rounded-full bg-white/10 grid place-items-center ring-2 ring-emerald font-extrabold">{me.name[0]}</button>
+          <button onClick={() => go('me')} aria-label="Perfil" className="w-11 h-11 rounded-full bg-white/10 grid place-items-center ring-2 ring-emerald font-extrabold overflow-hidden">{me.photo ? <img src={me.photo} alt="" className="w-full h-full object-cover" /> : me.name[0]}</button>
         </div>
       </header>
       <button onClick={() => { filter(null); go('map') }} className="mx-5 -mt-8 w-[calc(100%-2.5rem)] flex items-center gap-3 bg-white rounded-2xl px-5 py-5 shadow-[0_12px_32px_-8px_rgba(11,31,68,.35)] text-left hover:-translate-y-0.5 transition">
@@ -128,7 +131,10 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
   const [date, setDate] = useState(dt.date)
   const [time, setTime] = useState(dt.time)
   const [wait, setWait] = useState(60)
-  const [addr, setAddr] = useState('')
+  const defAddr = me.addresses?.find((a) => a.isDefault) ?? me.addresses?.[0]
+  const [addr, setAddr] = useState(defAddr ? fmtAddress(defAddr) : '')
+  const defCard = me.cards?.find((c) => c.isDefault) ?? me.cards?.[0]
+  const [cardId, setCardId] = useState(defCard?.id ?? '')
   const [err, setErr] = useState('')
   const field = 'w-full rounded-2xl bg-navy-100/70 px-4 py-3 font-semibold outline-none focus:ring-2 focus:ring-emerald'
 
@@ -137,7 +143,7 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
     if (!desc.trim()) return setErr('Descreva rapidamente o que você precisa.')
     if (!addr.trim()) return setErr('Informe o endereço do serviço.')
     if (isNaN(at.getTime()) || at.getTime() < Date.now()) return setErr('Escolha uma data e hora no futuro.')
-    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim() })
+    createRequest({ clientId: me.id, proId: pro.id, description: desc.trim(), serviceAt: at.toISOString(), waitMinutes: wait, address: addr.trim(), payment: me.cards?.find((c) => c.id === cardId) ? cardLabel(me.cards!.find((c) => c.id === cardId)!) : undefined })
     onDone()
   }
   return (
@@ -151,7 +157,14 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
         <label className="block"><span className="text-xs font-bold text-navy-900/60">O QUE PRECISA SER FEITO?</span>
           <textarea rows={2} className={`${field} mt-1.5 resize-none`} placeholder="Ex.: chuveiro não esquenta, disjuntor desarma…" value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
         <label className="block"><span className="text-xs font-bold text-navy-900/60">ENDEREÇO</span>
+          {!!me.addresses?.length && <div className="flex gap-2 mt-1.5 flex-wrap">{me.addresses.map((a) => <button type="button" key={a.id} onClick={() => setAddr(fmtAddress(a))} className={`px-3.5 py-2 rounded-full text-sm font-extrabold transition ${addr === fmtAddress(a) ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{a.label}</button>)}</div>}
           <input className={`${field} mt-1.5`} placeholder="Rua, número, bairro" value={addr} onChange={(e) => setAddr(e.target.value)} /></label>
+        <div>
+          <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="wallet" className="w-4 h-4" />FORMA DE PAGAMENTO</span>
+          {me.cards?.length ? (
+            <div className="flex gap-2 mt-1.5 flex-wrap">{me.cards.map((c) => <button type="button" key={c.id} onClick={() => setCardId(c.id)} className={`px-3.5 py-2 rounded-full text-sm font-extrabold transition ${cardId === c.id ? 'bg-navy-900 text-white' : 'bg-navy-100/70'}`}>{c.brand} {c.type === 'credit' ? 'créd.' : 'déb.'} {c.last4}</button>)}</div>
+          ) : <p className="text-xs text-navy-900/50 mt-1.5">Nenhum cartão cadastrado. Adicione em Perfil → Formas de pagamento, ou combine direto com o profissional.</p>}
+        </div>
         <div>
           <span className="text-xs font-bold text-navy-900/60 flex items-center gap-1"><Icon n="cal" className="w-4 h-4" />QUANDO O SERVIÇO DEVE ACONTECER?</span>
           <div className="grid grid-cols-2 gap-3 mt-1.5">
@@ -174,6 +187,8 @@ function RequestSheet({ pro, me, onClose, onDone }: { pro: User; me: User; onClo
 }
 
 function Profile({ p, back, request }: { p: User; back: () => void; request: () => void }) {
+  const { requests } = useDB()
+  const reviews = requests.filter((r) => r.proId === p.id && r.review).sort((a, b) => b.review!.at - a.review!.at)
   return (
     <div className="h-full overflow-y-auto no-scrollbar bg-white pb-44">
       <div className="relative h-80 bg-navy-900">
@@ -193,10 +208,11 @@ function Profile({ p, back, request }: { p: User; back: () => void; request: () 
       <section className="px-5 mt-7">
         <h2 className="font-extrabold text-lg mb-3">Avaliações da comunidade</h2>
         <div className="space-y-3">
-          {[['Fernanda L.', 'Chegou rápido, resolveu tudo e deixou tudo limpo. Super educado.', 'há 2 dias'], ['Paulo H.', 'Preço justo e explicou tudo antes de começar. Chamo de novo.', 'há 1 semana'], ['Daniela R.', 'Acompanhei o trajeto no mapa até a minha porta. Passa muita segurança.', 'há 2 semanas']].map(([n, t, d]) => (
-            <article key={n} className="rounded-2xl bg-navy-100/50 p-4">
-              <div className="flex items-center justify-between"><p className="font-bold">{n}</p><span className="flex">{[0, 1, 2, 3, 4].map((i) => <Star key={i} className="w-3.5 h-3.5" />)}</span></div>
-              <p className="text-sm mt-1.5 text-navy-900/80">{t}</p><p className="text-xs text-navy-900/50 mt-2">{d}</p>
+          {reviews.length === 0 && <p className="text-sm text-navy-900/50">Ainda sem avaliações.</p>}
+          {reviews.map((r) => (
+            <article key={r.id} className="rounded-2xl bg-navy-100/50 p-4">
+              <div className="flex items-center justify-between"><p className="font-bold">{userById(r.clientId)?.name.split(' ')[0]} {userById(r.clientId)?.name.split(' ').slice(-1)[0][0]}.</p><Stars n={r.review!.rating} /></div>
+              {r.review!.comment && <p className="text-sm mt-1.5 text-navy-900/80">{r.review!.comment}</p>}<p className="text-xs text-navy-900/50 mt-2">{new Date(r.review!.at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
             </article>
           ))}
         </div>
@@ -211,7 +227,7 @@ function Profile({ p, back, request }: { p: User; back: () => void; request: () 
   )
 }
 
-function OrderCard({ r, now }: { r: Request; now: number }) {
+function OrderCard({ r, now, onReview }: { r: Request; now: number; onReview: () => void }) {
   const pro = userById(r.proId)
   const st = STATUS_LABEL[r.status]
   const left = r.expiresAt - now, total = r.expiresAt - r.createdAt
@@ -235,33 +251,89 @@ function OrderCard({ r, now }: { r: Request; now: number }) {
         </div>
       )}
       {r.status === 'accepted' && <p className="mt-3 flex items-center gap-2 rounded-2xl bg-emerald/10 text-emerald-dark px-3 py-2.5 text-sm font-bold"><Icon n="car" className="w-5 h-5" />Confirmado! {pro?.name.split(' ')[0]} vai até você na data combinada.</p>}
+      {r.payment && r.status !== 'cancelled' && r.status !== 'declined' && r.status !== 'expired' && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-navy-900/55"><Icon n="wallet" className="w-4 h-4" />{r.payment} · {brl(r.price)}</p>}
+      {needsReview(r) && (
+        <button onClick={onReview} className="mt-3 w-full flex items-center justify-center gap-2 rounded-2xl py-3 font-extrabold text-white bg-urgent hover:brightness-110 active:scale-95 transition shadow-lg shadow-urgent/30"><Star className="w-5 h-5" />Avaliar atendimento</button>
+      )}
+      {r.status === 'done' && r.review && (
+        <div className="mt-3 rounded-2xl bg-navy-100/50 p-3"><div className="flex items-center justify-between"><p className="text-xs font-extrabold text-navy-900/60">SUA AVALIAÇÃO</p><Stars n={r.review.rating} /></div>{r.review.comment && <p className="text-sm mt-1.5 text-navy-900/80">{r.review.comment}</p>}</div>
+      )}
       {r.status === 'expired' && <p className="mt-3 text-sm text-navy-900/60">O profissional não respondeu a tempo. Que tal chamar outro?</p>}
     </article>
+  )
+}
+
+function ReviewSheet({ r, onClose }: { r: Request; onClose: () => void }) {
+  const pro = userById(r.proId)
+  const [stars, setStars] = useState(0)
+  const [text, setText] = useState('')
+  const [err, setErr] = useState('')
+  const labels = ['', 'Ruim', 'Regular', 'Bom', 'Muito bom', 'Excelente']
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <Avatar name={pro?.name ?? '?'} photo={pro?.photo} className="w-14 h-14" />
+        <div className="flex-1 min-w-0"><p className="text-xs font-extrabold text-urgent">AVALIAR ATENDIMENTO</p><p className="font-extrabold text-lg leading-tight truncate">{pro?.name}</p><p className="text-sm text-navy-900/60">{r.category} · {fmtWhen(r.serviceAt)}</p></div>
+        <button onClick={onClose} aria-label="Fechar" className="w-9 h-9 rounded-full bg-navy-100 grid place-items-center"><Icon n="x" className="w-4 h-4" /></button>
+      </div>
+      <p className="text-sm text-navy-900/70 mt-4">{r.description}</p>
+      <div className="mt-5 flex flex-col items-center">
+        <div className="flex gap-1.5" role="radiogroup" aria-label="Nota">
+          {[1, 2, 3, 4, 5].map((i) => <button key={i} type="button" role="radio" aria-checked={stars === i} aria-label={`${i} estrela${i > 1 ? 's' : ''}`} onClick={() => { setStars(i); setErr('') }} className={`transition active:scale-90 ${i <= stars ? '' : 'opacity-25 grayscale'}`}><Star className="w-11 h-11" /></button>)}
+        </div>
+        <p className="h-5 mt-2 text-sm font-extrabold text-navy-900/70">{labels[stars]}</p>
+      </div>
+      <textarea rows={3} className="w-full mt-3 rounded-2xl bg-navy-100/70 px-4 py-3 font-semibold outline-none focus:ring-2 focus:ring-emerald resize-none" placeholder="Conte como foi (opcional)" value={text} onChange={(e) => setText(e.target.value)} />
+      {err && <p role="alert" className="text-sm font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2 mt-3">{err}</p>}
+      <button onClick={() => { if (!stars) return setErr('Escolha uma nota de 1 a 5 estrelas.'); reviewRequest(r.id, stars, text); onClose() }} className="mt-4 w-full rounded-2xl py-4 font-extrabold text-white text-lg bg-emerald hover:bg-emerald-dark active:scale-95 transition shadow-lg shadow-emerald/40">Enviar avaliação</button>
+    </>
   )
 }
 
 function Orders() {
   const { requests, session } = useDB()
   const now = useNow()
-  const mine = requests.filter((r) => r.clientId === session)
+  const [f, setF] = useState<'open' | 'toRate' | 'history'>('open')
+  const [rate, setRate] = useState<string | null>(null)
+  const mine = requests.filter((r) => r.clientId === session).sort((a, b) => b.createdAt - a.createdAt)
+  const toRate = mine.filter(needsReview)
+  const list = mine.filter((r) => (f === 'open' ? r.status === 'pending' || r.status === 'accepted' : f === 'toRate' ? needsReview(r) : r.status !== 'pending' && r.status !== 'accepted'))
+  const tabs = [['open', 'Em andamento'], ['toRate', `A avaliar${toRate.length ? ` (${toRate.length})` : ''}`], ['history', 'Histórico']] as const
+  const rating = mine.find((r) => r.id === rate)
   return (
     <div className="h-full overflow-y-auto no-scrollbar pb-28 bg-navy-100/40">
-      <header className="bg-navy-900 text-white px-5 pt-8 pb-6 rounded-b-[28px]"><h1 className="text-2xl font-extrabold">Meus pedidos</h1><p className="text-sm text-white/60">Acompanhe prazos e respostas em tempo real</p></header>
+      <header className="bg-navy-900 text-white px-5 pt-8 pb-6 rounded-b-[28px]"><h1 className="text-2xl font-extrabold">Meus pedidos</h1><p className="text-sm text-white/60">Acompanhe prazos, histórico e avaliações</p>
+        <div className="grid grid-cols-3 bg-white/10 rounded-2xl p-1 mt-4 text-[13px] font-bold">
+          {tabs.map(([k, l]) => <button key={k} onClick={() => setF(k)} className={`py-2.5 rounded-xl transition ${f === k ? 'bg-white text-navy-900' : 'text-white/70'}`}>{l}</button>)}
+        </div>
+      </header>
       <div className="p-5 space-y-4">
-        {mine.length === 0 && <p className="text-center text-navy-900/50 py-16 font-semibold">Você ainda não fez nenhum pedido.</p>}
-        {mine.map((r) => <OrderCard key={r.id} r={r} now={now} />)}
+        {f === 'open' && toRate.length > 0 && <button onClick={() => setF('toRate')} className="w-full text-left rounded-2xl bg-urgent/10 text-urgent px-4 py-3 text-sm font-extrabold flex items-center gap-2"><Star className="w-5 h-5" />{toRate.length} {toRate.length === 1 ? 'atendimento aguarda' : 'atendimentos aguardam'} sua avaliação<span className="ml-auto"><Icon n="arrow" className="w-4 h-4" /></span></button>}
+        {list.length === 0 && <p className="text-center text-navy-900/50 py-16 font-semibold">{f === 'toRate' ? 'Tudo avaliado por aqui. 🎉' : f === 'history' ? 'Nenhum pedido no histórico.' : 'Nenhum pedido em andamento.'}</p>}
+        {list.map((r) => <OrderCard key={r.id} r={r} now={now} onReview={() => setRate(r.id)} />)}
       </div>
+      <Sheet open={!!rating && needsReview(rating)} onClose={() => setRate(null)}>{rating && <ReviewSheet r={rating} onClose={() => setRate(null)} />}</Sheet>
     </div>
   )
 }
 
 function Me({ me }: { me: User }) {
+  const { requests } = useDB()
+  const mine = requests.filter((r) => r.clientId === me.id)
+  const stats = [[String(mine.length), 'Pedidos'], [String(mine.filter((r) => r.status === 'done').length), 'Concluídos'], [String(mine.filter(needsReview).length), 'A avaliar']]
   return (
-    <div className="h-full bg-white pb-28">
+    <div className="h-full bg-white pb-28 overflow-y-auto no-scrollbar">
       <header className="bg-navy-900 text-white px-5 pt-10 pb-12 rounded-b-[32px] text-center">
-        <div className="w-20 h-20 rounded-full bg-emerald mx-auto grid place-items-center text-3xl font-extrabold">{me.name[0]}</div>
+        <PhotoPicker user={me} />
         <h1 className="text-2xl font-extrabold mt-3">{me.name}</h1><p className="text-white/60 text-sm">{me.email} · Cliente</p>
       </header>
+      <div className="px-5 -mt-6 grid grid-cols-3 gap-3 text-center relative">
+        {stats.map(([v, l]) => <div key={l} className="bg-white rounded-2xl py-3 shadow-[0_10px_28px_-8px_rgba(11,31,68,.35)]"><p className="text-2xl font-extrabold">{v}</p><p className="text-xs text-navy-900/50 font-semibold">{l}</p></div>)}
+      </div>
+      <div className="px-5 pb-2">
+        <AddressSection user={me} />
+        <PaymentSection user={me} />
+      </div>
       <div className="p-5"><button onClick={logout} className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 font-extrabold bg-navy-100 hover:bg-navy-100/70"><Icon n="out" className="w-5 h-5" />Sair da conta</button></div>
     </div>
   )
@@ -274,7 +346,7 @@ export default function ClientApp({ me }: { me: User }) {
   const [req, setReq] = useState(false)
   const [cat, setCat] = useState<string | null>(null)
   const pros = users.filter((u) => u.role === 'pro' && u.online)
-  const pending = requests.filter((r) => r.clientId === me.id && r.status === 'pending').length
+  const pending = requests.filter((r) => r.clientId === me.id && (r.status === 'pending' || needsReview(r))).length
   const nav: { t: Tab; l: string; i: string }[] = [{ t: 'home', l: 'Início', i: 'home' }, { t: 'map', l: 'Mapa', i: 'pin' }, { t: 'orders', l: 'Pedidos', i: 'list' }, { t: 'me', l: 'Perfil', i: 'user' }]
   const view = pro ? 'pro' : tab
   return (
