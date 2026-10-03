@@ -9,6 +9,7 @@ const WAITS = [{ m: 15, l: '15 min' }, { m: 30, l: '30 min' }, { m: 60, l: '1 ho
 
 const Stars = ({ n, className = 'w-3.5 h-3.5' }: { n: number; className?: string }) => <span className="flex">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= n ? '' : 'opacity-20 grayscale'}><Star className={className} /></span>)}</span>
 
+const URGENT_ETA = 10
 const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 const KEYWORDS: Record<string, string> = {
   Eletricista: 'eletrica eletrico luz lampada tomada chuveiro disjuntor fio fiacao quadro ventilador curto',
@@ -41,8 +42,8 @@ function ProCard({ p, onOpen, active, wide }: { p: User; onOpen: () => void; act
   )
 }
 
-function Home({ me, pros, go, pick, filter, q, setQ }: { me: User; pros: User[]; go: (t: Tab) => void; pick: (p: User) => void; filter: (c: string | null) => void; q: string; setQ: (q: string) => void }) {
-  const suggestions = q.trim() ? pros.filter((p) => matches(p, q)).slice(0, 4) : []
+function Home({ me, pros, go, pick, filter, q, setQ, urgent, setUrgent }: { me: User; pros: User[]; go: (t: Tab) => void; pick: (p: User) => void; filter: (c: string | null) => void; q: string; setQ: (q: string) => void; urgent: boolean; setUrgent: (u: boolean) => void }) {
+  const suggestions = q.trim() ? pros.filter((p) => matches(p, q) && (!urgent || (p.eta ?? 99) <= URGENT_ETA)).slice(0, 4) : []
   return (
     <div className="h-full overflow-y-auto no-scrollbar pb-28 bg-white">
       <header className="bg-navy-900 text-white px-5 pt-8 pb-16 rounded-b-[32px]">
@@ -57,9 +58,11 @@ function Home({ me, pros, go, pick, filter, q, setQ }: { me: User; pros: User[];
       <div className="relative mx-5 -mt-8 z-10">
         <form role="search" onSubmit={(e) => { e.preventDefault(); filter(null); go('map') }} className="flex items-center gap-3 bg-white rounded-2xl px-5 py-4 shadow-[0_12px_32px_-8px_rgba(11,31,68,.35)] focus-within:ring-2 focus-within:ring-emerald transition">
           <span className="text-emerald shrink-0"><Icon n="search" /></span>
-          <input type="search" enterKeyHint="search" aria-label="Buscar serviço ou profissional" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Do que você precisa agora?" className="min-w-0 flex-1 bg-transparent outline-none font-semibold placeholder:text-navy-900/50 [&::-webkit-search-cancel-button]:hidden" />
-          {q ? <button type="button" onClick={() => setQ('')} aria-label="Limpar busca" className="w-7 h-7 rounded-full bg-navy-100 grid place-items-center shrink-0"><Icon n="x" className="w-3.5 h-3.5" /></button> : <span className="text-xs font-bold bg-urgent/15 text-urgent px-2 py-1 rounded-full shrink-0">URGENTE</span>}
+          <input type="search" enterKeyHint="search" aria-label="Buscar serviço ou profissional" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Do que você precisa?" className="min-w-0 flex-1 bg-transparent outline-none font-semibold placeholder:text-navy-900/50 [&::-webkit-search-cancel-button]:hidden" />
+          {q ? <button type="button" onClick={() => setQ('')} aria-label="Limpar busca" className="w-7 h-7 rounded-full bg-navy-100 grid place-items-center shrink-0"><Icon n="x" className="w-3.5 h-3.5" /></button> : null}
+          <button type="button" aria-pressed={urgent} onClick={() => setUrgent(!urgent)} title="Mostrar só quem chega em até 10 minutos" className={`flex items-center gap-1 text-xs font-extrabold px-2.5 py-1.5 rounded-full shrink-0 transition active:scale-95 ${urgent ? 'bg-urgent text-white shadow-md shadow-urgent/40' : 'bg-urgent/15 text-urgent'}`}><Icon n="bolt" className="w-3.5 h-3.5" />URGENTE</button>
         </form>
+        {urgent && !q.trim() && <p className="mt-2 px-1 text-xs font-bold text-urgent flex items-center gap-1"><Icon n="bolt" className="w-3.5 h-3.5" />Modo urgente: só profissionais a até {URGENT_ETA} min, do mais perto ao mais longe.</p>}
         {q.trim() && (
           <div className="absolute inset-x-0 top-full mt-2 bg-white rounded-2xl shadow-[0_16px_40px_-8px_rgba(11,31,68,.4)] overflow-hidden">
             {suggestions.map((p) => (
@@ -137,8 +140,8 @@ function ProPreview({ p, onClose, onProfile, onRequest }: { p: User; onClose: ()
 
 const SHEET_MIN = 330
 
-function MapScreen({ pros, pick, request, cat, setCat, q, setQ }: { pros: User[]; pick: (p: User) => void; request: (p: User) => void; cat: string | null; setCat: (c: string | null) => void; q: string; setQ: (q: string) => void }) {
-  const list = pros.filter((p) => (!cat || p.category === cat) && matches(p, q))
+function MapScreen({ pros, pick, request, cat, setCat, q, setQ, urgent, setUrgent }: { pros: User[]; pick: (p: User) => void; request: (p: User) => void; cat: string | null; setCat: (c: string | null) => void; q: string; setQ: (q: string) => void; urgent: boolean; setUrgent: (u: boolean) => void }) {
+  const list = pros.filter((p) => (!cat || p.category === cat) && matches(p, q) && (!urgent || (p.eta ?? 99) <= URGENT_ETA)).sort((a, b) => (urgent ? (a.eta ?? 0) - (b.eta ?? 0) : 0))
   const [sel, setSel] = useState<string | null>(null)
   const [preview, setPreview] = useState<User | null>(null)
   const [full, setFull] = useState(false)
@@ -188,15 +191,16 @@ function MapScreen({ pros, pick, request, cat, setCat, q, setQ }: { pros: User[]
           <span className="flex items-center gap-1 text-xs font-bold text-emerald-dark shrink-0 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-emerald animate-pulse" />{list.length} ao vivo</span>
         </form>
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          <button onClick={() => setUrgent(!urgent)} aria-pressed={urgent} className={`shrink-0 flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-extrabold shadow transition ${urgent ? 'bg-urgent text-white' : 'bg-white text-urgent'}`}><Icon n="bolt" className="w-3.5 h-3.5" />Urgente</button>
           {[null, ...CATS].map((c) => <button key={c ?? 'all'} onClick={() => setCat(c)} className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-extrabold shadow transition ${cat === c ? 'bg-navy-900 text-white' : 'bg-white'}`}>{c ?? 'Todos'}</button>)}
         </div>
       </div>
       <div className={`absolute bottom-0 inset-x-0 z-10 flex flex-col bg-white rounded-t-[28px] shadow-[0_-12px_32px_-12px_rgba(11,31,68,.35)] ${dragH === null ? 'transition-[height] duration-300 ease-out' : ''}`} style={{ height }}>
         <div role="button" tabIndex={0} aria-label={full ? 'Recolher lista' : 'Expandir lista'} aria-expanded={full} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setFull((f) => !f) }} style={{ touchAction: 'none' }} className="shrink-0 cursor-grab active:cursor-grabbing select-none pt-3 pb-3">
           <div className="mx-auto w-10 h-1.5 rounded-full bg-navy-100 mb-3" />
-          <div className="px-5 flex items-center justify-between"><p className="font-extrabold">Profissionais encontrados <span className="text-navy-900/40 font-bold">· {list.length}</span></p><span className="text-xs font-extrabold text-emerald-dark">{full ? 'Ver mapa' : 'Ver lista'}</span></div>
+          <div className="px-5 flex items-center justify-between"><p className="font-extrabold">Profissionais encontrados <span className="text-navy-900/40 font-bold">· {list.length}</span></p><span className="text-xs font-extrabold text-emerald-dark whitespace-nowrap">{full ? 'Ver mapa' : 'Ver lista'}</span></div>
         </div>
-        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">{q.trim() ? `Nenhum profissional encontrado para “${q.trim()}”.` : 'Nenhum profissional disponível agora nesta categoria.'}</p> : full ? (
+        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">{q.trim() ? `Nenhum profissional encontrado para “${q.trim()}”.` : urgent ? `Ninguém a até ${URGENT_ETA} min agora. Desligue o modo urgente para ver todos.` : 'Nenhum profissional disponível agora nesta categoria.'}</p> : full ? (
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-28 space-y-3 pt-1">
             {list.map((p) => <ProCard key={p.id} p={p} wide active={active === p.id} onOpen={() => open(p)} />)}
           </div>
@@ -456,6 +460,7 @@ export default function ClientApp({ me }: { me: User }) {
   const [reqPro, setReqPro] = useState<User | null>(null)
   const [cat, setCat] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [urgent, setUrgent] = useState(false)
   const pros = users.filter((u) => u.role === 'pro' && u.online)
   const pending = requests.filter((r) => r.clientId === me.id && (r.status === 'pending' || needsReview(r))).length
   const nav: { t: Tab; l: string; i: string }[] = [{ t: 'home', l: 'Início', i: 'home' }, { t: 'map', l: 'Mapa', i: 'pin' }, { t: 'orders', l: 'Pedidos', i: 'list' }, { t: 'me', l: 'Perfil', i: 'user' }]
@@ -463,8 +468,8 @@ export default function ClientApp({ me }: { me: User }) {
   return (
     <div className="h-full relative">
       <main className="h-full">
-        {view === 'home' && <Home me={me} pros={pros} go={setTab} pick={setPro} filter={setCat} q={q} setQ={setQ} />}
-        {view === 'map' && <MapScreen pros={pros} pick={setPro} request={setReqPro} cat={cat} setCat={setCat} q={q} setQ={setQ} />}
+        {view === 'home' && <Home me={me} pros={pros} go={setTab} pick={setPro} filter={setCat} q={q} setQ={setQ} urgent={urgent} setUrgent={setUrgent} />}
+        {view === 'map' && <MapScreen pros={pros} pick={setPro} request={setReqPro} cat={cat} setCat={setCat} q={q} setQ={setQ} urgent={urgent} setUrgent={setUrgent} />}
         {view === 'pro' && pro && <Profile p={pro} back={() => setPro(null)} request={() => setReqPro(pro)} />}
         {view === 'orders' && <Orders />}
         {view === 'me' && <Me me={me} />}

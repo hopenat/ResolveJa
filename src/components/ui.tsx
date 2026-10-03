@@ -15,6 +15,8 @@ export function Icon({ n, className = 'w-6 h-6' }: { n: string; className?: stri
     bolt: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
     drop: <path d="M12 3s6 6.500 6 11a6 6 0 0 1-12 0c0-4.500 6-11 6-11z" />,
     broom: <path d="m14 4 6 6M4 20l7-7M9 9l6 6-3 5H6l-2-2v-6z" />,
+    brush: <><path d="m16 22-1-4M8 22l1-4" /><path d="M19 13.990a1 1 0 0 0 1-1V12a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v.990a1 1 0 0 0 1 1" /><path d="M5 14h14l1.973 6.767A1 1 0 0 1 20 22H4a1 1 0 0 1-.973-1.233z" /></>,
+    hammer: <><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9" /><path d="m18 15 4-4" /><path d="m21.500 11.500-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.260-2.260a6 6 0 0 0-4.202-1.756L9 2.960l.920.820A6.180 6.180 0 0 1 12 8.400V10l2 2h1.172a2 2 0 0 1 1.414.586L18.500 14.500" /></>,
     tool: <path d="M14.500 6.500a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8M3 21l4-4M5 7l2-2 3 3-2 2z" />,
     truck: <><path d="M2 6h12v10H2zM14 9h4l4 4v3h-8z" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></>,
     home: <path d="m3 11 9-8 9 8v10h-6v-6H9v6H3z" />,
@@ -39,7 +41,7 @@ export function Icon({ n, className = 'w-6 h-6' }: { n: string; className?: stri
   }
   return <svg viewBox="0 0 24 24" className={className} {...p}>{d[n]}</svg>
 }
-export const catIcon = (c?: string) => ({ Eletricista: 'bolt', Encanador: 'drop', Diarista: 'broom', Montador: 'tool', Frete: 'truck' } as Record<string, string>)[c ?? ''] ?? 'tool'
+export const catIcon = (c?: string) => ({ Eletricista: 'bolt', Encanador: 'drop', Diarista: 'brush', Montador: 'hammer', Frete: 'truck' } as Record<string, string>)[c ?? ''] ?? 'tool'
 
 export const Star = ({ className = 'w-4 h-4' }) => (
   <svg viewBox="0 0 24 24" className={`${className} fill-amber-400`}><path d="m12 2 3 6.500 7 .8-5.200 4.800 1.500 7L12 17.500 5.700 21l1.500-7L2 9.300l7-.8z" /></svg>
