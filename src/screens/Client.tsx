@@ -9,6 +9,21 @@ const WAITS = [{ m: 15, l: '15 min' }, { m: 30, l: '30 min' }, { m: 60, l: '1 ho
 
 const Stars = ({ n, className = 'w-3.5 h-3.5' }: { n: number; className?: string }) => <span className="flex">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= n ? '' : 'opacity-20 grayscale'}><Star className={className} /></span>)}</span>
 
+const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+const KEYWORDS: Record<string, string> = {
+  Eletricista: 'eletrica eletrico luz lampada tomada chuveiro disjuntor fio fiacao quadro ventilador curto',
+  Encanador: 'hidraulica agua vazamento cano torneira pia descarga ralo entupimento caixa dagua',
+  Diarista: 'faxina limpeza limpar diaria casa domestica passar roupa',
+  Montador: 'montagem montar movel moveis armario guarda-roupa estante cama prateleira',
+  Frete: 'mudanca carreto transporte carga caminhao entrega',
+}
+function matches(p: User, q: string) {
+  const t = norm(q)
+  if (!t) return true
+  const hay = norm(`${p.name} ${p.category ?? ''} ${KEYWORDS[p.category ?? ''] ?? ''}`)
+  return t.split(/\s+/).every((w) => hay.includes(w))
+}
+
 function ProCard({ p, onOpen, active, wide }: { p: User; onOpen: () => void; active: boolean; wide?: boolean }) {
   return (
     <button onClick={onOpen} className={`${wide ? 'w-full' : 'snap-center shrink-0 w-[78%]'} text-left bg-white rounded-2xl p-3 shadow-[0_8px_24px_-8px_rgba(11,31,68,.35)] border-2 transition ${active ? 'border-emerald' : 'border-transparent'}`}>
@@ -26,7 +41,8 @@ function ProCard({ p, onOpen, active, wide }: { p: User; onOpen: () => void; act
   )
 }
 
-function Home({ me, pros, go, pick, filter }: { me: User; pros: User[]; go: (t: Tab) => void; pick: (p: User) => void; filter: (c: string | null) => void }) {
+function Home({ me, pros, go, pick, filter, q, setQ }: { me: User; pros: User[]; go: (t: Tab) => void; pick: (p: User) => void; filter: (c: string | null) => void; q: string; setQ: (q: string) => void }) {
+  const suggestions = q.trim() ? pros.filter((p) => matches(p, q)).slice(0, 4) : []
   return (
     <div className="h-full overflow-y-auto no-scrollbar pb-28 bg-white">
       <header className="bg-navy-900 text-white px-5 pt-8 pb-16 rounded-b-[32px]">
@@ -38,16 +54,31 @@ function Home({ me, pros, go, pick, filter }: { me: User; pros: User[]; go: (t: 
           <button onClick={() => go('me')} aria-label="Perfil" className="w-11 h-11 rounded-full bg-white/10 grid place-items-center ring-2 ring-emerald font-extrabold overflow-hidden">{me.photo ? <img src={me.photo} alt="" className="w-full h-full object-cover" /> : me.name[0]}</button>
         </div>
       </header>
-      <button onClick={() => { filter(null); go('map') }} className="mx-5 -mt-8 w-[calc(100%-2.5rem)] flex items-center gap-3 bg-white rounded-2xl px-5 py-5 shadow-[0_12px_32px_-8px_rgba(11,31,68,.35)] text-left hover:-translate-y-0.5 transition">
-        <span className="text-emerald"><Icon n="search" /></span>
-        <span className="font-semibold text-navy-900/60">Do que você precisa agora?</span>
-        <span className="ml-auto text-xs font-bold bg-urgent/15 text-urgent px-2 py-1 rounded-full">URGENTE</span>
-      </button>
+      <div className="relative mx-5 -mt-8 z-10">
+        <form role="search" onSubmit={(e) => { e.preventDefault(); filter(null); go('map') }} className="flex items-center gap-3 bg-white rounded-2xl px-5 py-4 shadow-[0_12px_32px_-8px_rgba(11,31,68,.35)] focus-within:ring-2 focus-within:ring-emerald transition">
+          <span className="text-emerald shrink-0"><Icon n="search" /></span>
+          <input type="search" enterKeyHint="search" aria-label="Buscar serviço ou profissional" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Do que você precisa agora?" className="min-w-0 flex-1 bg-transparent outline-none font-semibold placeholder:text-navy-900/50 [&::-webkit-search-cancel-button]:hidden" />
+          {q ? <button type="button" onClick={() => setQ('')} aria-label="Limpar busca" className="w-7 h-7 rounded-full bg-navy-100 grid place-items-center shrink-0"><Icon n="x" className="w-3.5 h-3.5" /></button> : <span className="text-xs font-bold bg-urgent/15 text-urgent px-2 py-1 rounded-full shrink-0">URGENTE</span>}
+        </form>
+        {q.trim() && (
+          <div className="absolute inset-x-0 top-full mt-2 bg-white rounded-2xl shadow-[0_16px_40px_-8px_rgba(11,31,68,.4)] overflow-hidden">
+            {suggestions.map((p) => (
+              <button key={p.id} type="button" onClick={() => pick(p)} className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-navy-100/60 transition">
+                <Avatar name={p.name} photo={p.photo} className="w-10 h-10" />
+                <span className="min-w-0 flex-1"><span className="block font-bold truncate">{p.name}</span><span className="block text-xs text-navy-900/55">{p.category} · {p.eta} min</span></span>
+                <span className="flex items-center gap-1 text-xs font-bold"><Star className="w-3.5 h-3.5" />{p.rating?.toFixed(1)}</span>
+              </button>
+            ))}
+            {suggestions.length === 0 && <p className="px-4 py-3 text-sm text-navy-900/60">Nenhum profissional encontrado para “{q.trim()}”.</p>}
+            <button type="button" onClick={() => { filter(null); go('map') }} className="w-full px-4 py-3 text-sm font-extrabold text-emerald-dark border-t border-navy-100 text-left">Ver todos no mapa →</button>
+          </div>
+        )}
+      </div>
       <section className="px-5 mt-7">
         <h2 className="font-extrabold text-lg mb-3">Categorias</h2>
         <div className="grid grid-cols-3 gap-3">
           {CATS.map((c) => (
-            <button key={c} onClick={() => { filter(c); go('map') }} className="rounded-2xl bg-navy-100/60 hover:bg-navy-900 hover:text-white transition py-4 flex flex-col items-center gap-2 font-semibold text-sm">
+            <button key={c} onClick={() => { setQ(''); filter(c); go('map') }} className="rounded-2xl bg-navy-100/60 hover:bg-navy-900 hover:text-white transition py-4 flex flex-col items-center gap-2 font-semibold text-sm">
               <span className="w-11 h-11 rounded-xl bg-white text-navy-800 grid place-items-center shadow-sm"><Icon n={catIcon(c)} /></span>{c}
             </button>
           ))}
@@ -106,8 +137,8 @@ function ProPreview({ p, onClose, onProfile, onRequest }: { p: User; onClose: ()
 
 const SHEET_MIN = 330
 
-function MapScreen({ pros, pick, request, cat, setCat }: { pros: User[]; pick: (p: User) => void; request: (p: User) => void; cat: string | null; setCat: (c: string | null) => void }) {
-  const list = pros.filter((p) => !cat || p.category === cat)
+function MapScreen({ pros, pick, request, cat, setCat, q, setQ }: { pros: User[]; pick: (p: User) => void; request: (p: User) => void; cat: string | null; setCat: (c: string | null) => void; q: string; setQ: (q: string) => void }) {
+  const list = pros.filter((p) => (!cat || p.category === cat) && matches(p, q))
   const [sel, setSel] = useState<string | null>(null)
   const [preview, setPreview] = useState<User | null>(null)
   const [full, setFull] = useState(false)
@@ -150,11 +181,12 @@ function MapScreen({ pros, pick, request, cat, setCat }: { pros: User[]; pick: (
         ))}
       </div>
       <div className="absolute top-4 inset-x-4 space-y-2 z-20">
-        <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 shadow-[0_8px_24px_-6px_rgba(11,31,68,.4)]">
-          <span className="text-emerald"><Icon n="search" className="w-5 h-5" /></span>
-          <span className="font-bold text-sm">{cat ?? 'Todos os serviços'} · São Gonçalo</span>
-          <span className="ml-auto flex items-center gap-1 text-xs font-bold text-emerald-dark"><span className="w-2 h-2 rounded-full bg-emerald animate-pulse" />{list.length} ao vivo</span>
-        </div>
+        <form role="search" onSubmit={(e) => { e.preventDefault(); (document.activeElement as HTMLElement | null)?.blur() }} className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 shadow-[0_8px_24px_-6px_rgba(11,31,68,.4)] focus-within:ring-2 focus-within:ring-emerald transition">
+          <span className="text-emerald shrink-0"><Icon n="search" className="w-5 h-5" /></span>
+          <input type="search" enterKeyHint="search" aria-label="Buscar serviço ou profissional" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`${cat ?? 'Todos os serviços'} · São Gonçalo`} className="min-w-0 flex-1 bg-transparent outline-none font-bold text-sm placeholder:text-navy-900 [&::-webkit-search-cancel-button]:hidden" />
+          {q && <button type="button" onClick={() => setQ('')} aria-label="Limpar busca" className="w-6 h-6 rounded-full bg-navy-100 grid place-items-center shrink-0"><Icon n="x" className="w-3 h-3" /></button>}
+          <span className="flex items-center gap-1 text-xs font-bold text-emerald-dark shrink-0 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-emerald animate-pulse" />{list.length} ao vivo</span>
+        </form>
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {[null, ...CATS].map((c) => <button key={c ?? 'all'} onClick={() => setCat(c)} className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-extrabold shadow transition ${cat === c ? 'bg-navy-900 text-white' : 'bg-white'}`}>{c ?? 'Todos'}</button>)}
         </div>
@@ -164,7 +196,7 @@ function MapScreen({ pros, pick, request, cat, setCat }: { pros: User[]; pick: (
           <div className="mx-auto w-10 h-1.5 rounded-full bg-navy-100 mb-3" />
           <div className="px-5 flex items-center justify-between"><p className="font-extrabold">Profissionais encontrados <span className="text-navy-900/40 font-bold">· {list.length}</span></p><span className="text-xs font-extrabold text-emerald-dark">{full ? 'Ver mapa' : 'Ver lista'}</span></div>
         </div>
-        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">Nenhum profissional disponível agora nesta categoria.</p> : full ? (
+        {list.length === 0 ? <p className="px-5 text-sm text-navy-900/60 pb-4">{q.trim() ? `Nenhum profissional encontrado para “${q.trim()}”.` : 'Nenhum profissional disponível agora nesta categoria.'}</p> : full ? (
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-28 space-y-3 pt-1">
             {list.map((p) => <ProCard key={p.id} p={p} wide active={active === p.id} onOpen={() => open(p)} />)}
           </div>
@@ -423,6 +455,7 @@ export default function ClientApp({ me }: { me: User }) {
   const [pro, setPro] = useState<User | null>(null)
   const [reqPro, setReqPro] = useState<User | null>(null)
   const [cat, setCat] = useState<string | null>(null)
+  const [q, setQ] = useState('')
   const pros = users.filter((u) => u.role === 'pro' && u.online)
   const pending = requests.filter((r) => r.clientId === me.id && (r.status === 'pending' || needsReview(r))).length
   const nav: { t: Tab; l: string; i: string }[] = [{ t: 'home', l: 'Início', i: 'home' }, { t: 'map', l: 'Mapa', i: 'pin' }, { t: 'orders', l: 'Pedidos', i: 'list' }, { t: 'me', l: 'Perfil', i: 'user' }]
@@ -430,8 +463,8 @@ export default function ClientApp({ me }: { me: User }) {
   return (
     <div className="h-full relative">
       <main className="h-full">
-        {view === 'home' && <Home me={me} pros={pros} go={setTab} pick={setPro} filter={setCat} />}
-        {view === 'map' && <MapScreen pros={pros} pick={setPro} request={setReqPro} cat={cat} setCat={setCat} />}
+        {view === 'home' && <Home me={me} pros={pros} go={setTab} pick={setPro} filter={setCat} q={q} setQ={setQ} />}
+        {view === 'map' && <MapScreen pros={pros} pick={setPro} request={setReqPro} cat={cat} setCat={setCat} q={q} setQ={setQ} />}
         {view === 'pro' && pro && <Profile p={pro} back={() => setPro(null)} request={() => setReqPro(pro)} />}
         {view === 'orders' && <Orders />}
         {view === 'me' && <Me me={me} />}
