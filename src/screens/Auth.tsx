@@ -71,6 +71,7 @@ export function Auth({ role, back }: { role: Role; back: () => void }) {
             <div>
               <p className={`text-xs font-extrabold tracking-widest ${pro ? 'text-urgent' : 'text-emerald'}`}>{pro ? 'ÁREA DO PRESTADOR' : 'ÁREA DO CLIENTE'}</p>
               <h1 className="text-2xl font-extrabold leading-tight">{mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}</h1>
+              {mode === 'signup' && <p className="text-sm text-white/60 mt-0.5">{pro ? 'Receba chamados perto de você' : 'Leva menos de 1 minuto'}</p>}
             </div>
           </div>
         </div>
@@ -84,24 +85,37 @@ export function Auth({ role, back }: { role: Role; back: () => void }) {
             {mode === 'signup' && <div className="relative"><Icon n="user" className={iconCls} /><input required className={field} placeholder="Nome completo" value={f.name} onChange={(e) => up('name', e.target.value)} /></div>}
             <div className="relative"><Icon n="mail" className={iconCls} /><input required type="email" autoComplete="email" className={field} placeholder="E-mail" value={f.email} onChange={(e) => up('email', e.target.value)} /></div>
             <div className="relative"><Icon n="lock" className={iconCls} /><input required type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className={field} placeholder="Senha" value={f.password} onChange={(e) => up('password', e.target.value)} /></div>
+            {mode === 'signup' && <p className="text-xs font-semibold text-navy-900/50 px-1 -mt-1">Mínimo de 6 caracteres</p>}
             {mode === 'signup' && pro && (
-              <>
-                <p className="text-xs font-bold text-navy-900/50 pt-1">SUA ESPECIALIDADE</p>
+              <div className="space-y-3 pt-2 border-t border-navy-100">
+                <p className="text-xs font-extrabold tracking-widest text-navy-900/50 pt-1">SUA ESPECIALIDADE</p>
                 <div className="flex flex-wrap gap-2">
-                  {CATS.map((c) => <button type="button" key={c} onClick={() => up('category', c)} className={`px-3.5 py-2 rounded-full text-sm font-bold transition ${f.category === c ? 'bg-urgent text-white' : 'bg-navy-100/70'}`}>{c}</button>)}
+                  {CATS.map((c) => <button type="button" key={c} onClick={() => up('category', c)} className={`px-3.5 py-2 rounded-full text-sm font-bold transition ${f.category === c ? 'bg-urgent text-white shadow-md shadow-urgent/30' : 'bg-navy-100/70 hover:bg-navy-100'}`}>{c}</button>)}
                 </div>
-                <div className="flex items-center gap-2"><span className="font-bold text-sm">Preço base R$</span><input type="number" min={20} className={`${plain} !w-28`} value={f.price} onChange={(e) => up('price', e.target.value)} /></div>
-              </>
+                <p className="text-xs font-extrabold tracking-widest text-navy-900/50 pt-1">PREÇO BASE</p>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-extrabold text-navy-900/50 pointer-events-none">R$</span>
+                  <input type="number" min={20} inputMode="numeric" className={`${field} !pl-12`} value={f.price} onChange={(e) => up('price', e.target.value)} />
+                </div>
+              </div>
             )}
             {err && <p role="alert" className="text-sm font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</p>}
             <button className={`w-full rounded-2xl py-4 font-extrabold text-white text-lg shadow-lg active:scale-95 transition ${accent}`}>{mode === 'login' ? 'Entrar' : 'Criar conta e entrar'}</button>
           </div>
-          <div className="flex items-center gap-3 mt-6 text-xs font-bold text-navy-900/40">
-            <span className="flex-1 h-px bg-navy-900/10" />OU<span className="flex-1 h-px bg-navy-900/10" />
-          </div>
-          <button type="button" onClick={demo} className="mt-4 w-full rounded-2xl bg-white border border-navy-100 shadow-sm py-3.5 text-sm font-bold text-navy-900/80 hover:border-emerald transition">
-            Usar conta de demonstração {pro ? '(Marcos, eletricista)' : '(Rafael)'}
-          </button>
+          {mode === 'login' ? (
+            <>
+              <div className="flex items-center gap-3 mt-6 text-xs font-bold text-navy-900/40">
+                <span className="flex-1 h-px bg-navy-900/10" />OU<span className="flex-1 h-px bg-navy-900/10" />
+              </div>
+              <button type="button" onClick={demo} className="mt-4 w-full rounded-2xl bg-white border border-navy-100 shadow-sm py-3.5 text-sm font-bold text-navy-900/80 hover:border-emerald transition">
+                Usar conta de demonstração {pro ? '(Marcos, eletricista)' : '(Rafael)'}
+              </button>
+            </>
+          ) : (
+            <p className="mt-6 text-center text-sm font-semibold text-navy-900/60">
+              Já tem conta? <button type="button" onClick={() => { setMode('login'); setErr(null) }} className={`font-extrabold underline ${pro ? 'text-urgent' : 'text-emerald-dark'}`}>Entrar</button>
+            </p>
+          )}
           <p className="mt-auto pt-8 text-center text-xs text-navy-900/40">Protótipo · dados de demonstração</p>
         </form>
       </div>
