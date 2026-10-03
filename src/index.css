@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --color-navy-950: #071530;
+  --color-navy-900: #0b1f44;
+  --color-navy-800: #14306a;
+  --color-navy-100: #e6ecf7;
+  --color-emerald: #10b981;
+  --color-emerald-dark: #047857;
+  --color-urgent: #ff7a1a;
+}
+
+body { font-family: var(--font-sans); background: #dfe6f2; color: var(--color-navy-900); -webkit-font-smoothing: antialiased; }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+::selection { background: var(--color-emerald); color: white; }
+
+@keyframes pulse-ring { 0% { transform: scale(.6); opacity: .6 } 100% { transform: scale(2.4); opacity: 0 } }
+.pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+@keyframes dash { to { stroke-dashoffset: -40 } }
+.route-flow { stroke-dasharray: 2 14; animation: dash 1.2s linear infinite; }
+@keyframes slide-up { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+.slide-up { animation: slide-up .5s cubic-bezier(.2,.8,.2,1) both; }
