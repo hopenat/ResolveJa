@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { projectId, publicAnonKey } from '../../utils/supabase/info'
+import { buildSeed } from './seed'
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-9e4cc32d`
 async function api(path: string, method = 'GET', body?: unknown) {
@@ -11,43 +12,27 @@ const pushUser = (u: User) => { api(`/users/${u.id}`, 'PUT', u).catch(console.er
 const pushReq = (r: Request) => { api(`/requests/${r.id}`, 'PUT', r).catch(console.error) }
 
 export type Role = 'client' | 'pro'
+export type Address = { id: string; label: string; cep: string; street: string; number: string; district: string; city: string; complement?: string; isDefault?: boolean }
+export type Card = { id: string; type: 'credit' | 'debit'; brand: string; last4: string; holder: string; exp: string; isDefault?: boolean }
 export type User = {
   id: string; role: Role; name: string; email: string; password: string
   photo?: string; category?: string; price?: number; rating?: number; jobs?: number
   x?: number; y?: number; eta?: number; online?: boolean
+  addresses?: Address[]; cards?: Card[]
 }
+export type Review = { rating: number; comment: string; at: number }
 export type Status = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled' | 'done'
 export type Request = {
   id: string; clientId: string; proId: string; category: string; description: string
   serviceAt: string; waitMinutes: number; createdAt: number; expiresAt: number
   status: Status; price: number; address: string; respondedAt?: number
+  payment?: string; review?: Review
 }
 type DB = { users: User[]; requests: Request[]; session: string | null }
 
-const KEY = 'resolveja-db-v1'
-const img = (id: string) => `https://images.unsplash.com/photo-${id}?w=600&h=600&fit=crop&auto=format`
+const KEY = 'resolveja-db-v2'
 const MIN = 60_000
-
-function seed(): DB {
-  const now = Date.now()
-  const users: User[] = [
-    { id: 'c-demo', role: 'client', name: 'Rafael Moreira', email: 'cliente@resolveja.com', password: '123456' },
-    { id: 'p-demo', role: 'pro', name: 'Marcos Oliveira', email: 'prestador@resolveja.com', password: '123456', category: 'Eletricista', price: 80, rating: 4.9, jobs: 120, x: 250, y: 150, eta: 5, online: true, photo: img('1649768870222-17848797d6b4') },
-    { id: 'p-2', role: 'pro', name: 'Juliana Prado', email: 'juliana@resolveja.com', password: '123456', category: 'Diarista', price: 120, rating: 4.8, jobs: 214, x: 110, y: 240, eta: 8, online: true, photo: img('1494790108377-be9c29b29330') },
-    { id: 'p-3', role: 'pro', name: 'Rogério Santos', email: 'rogerio@resolveja.com', password: '123456', category: 'Encanador', price: 90, rating: 4.7, jobs: 86, x: 290, y: 270, eta: 11, online: true, photo: img('1732395805034-e0bf859665e5') },
-    { id: 'p-4', role: 'pro', name: 'Camila Duarte', email: 'camila@resolveja.com', password: '123456', category: 'Montador', price: 70, rating: 5.0, jobs: 63, x: 70, y: 110, eta: 14, online: true, photo: img('1581065178047-8ee15951ede6') },
-    { id: 'p-5', role: 'pro', name: 'Wellington Reis', email: 'well@resolveja.com', password: '123456', category: 'Frete', price: 150, rating: 4.6, jobs: 340, x: 200, y: 60, eta: 17, online: true, photo: img('1787672357491-d43acdf974cb') },
-    { id: 'c-2', role: 'client', name: 'Patrícia Mendes', email: 'patricia@exemplo.com', password: '123456' },
-    { id: 'c-3', role: 'client', name: 'Paulo Henrique', email: 'paulo@exemplo.com', password: '123456' },
-  ]
-  const day = (d: number, h: number) => { const t = new Date(now + d * 864e5); t.setHours(h, 0, 0, 0); return t.toISOString() }
-  const requests: Request[] = [
-    { id: 'r1', clientId: 'c-2', proId: 'p-demo', category: 'Eletricista', description: 'Disjuntor desarmando toda vez que ligo o chuveiro.', serviceAt: day(0, 18), waitMinutes: 60, createdAt: now - 4 * MIN, expiresAt: now + 56 * MIN, status: 'pending', price: 95, address: 'Rua Dr. Nilo Peçanha, 210 · Zé Garoto' },
-    { id: 'r2', clientId: 'c-3', proId: 'p-demo', category: 'Eletricista', description: 'Instalar 3 tomadas novas na sala e trocar o ventilador de teto.', serviceAt: day(1, 9), waitMinutes: 240, createdAt: now - 20 * MIN, expiresAt: now + 220 * MIN, status: 'pending', price: 140, address: 'Av. Presidente Kennedy, 88 · Centro' },
-    { id: 'r3', clientId: 'c-2', proId: 'p-demo', category: 'Eletricista', description: 'Troca de lâmpadas e revisão do quadro de luz.', serviceAt: day(-3, 14), waitMinutes: 60, createdAt: now - 3 * 864e5, expiresAt: now - 3 * 864e5 + 60 * MIN, status: 'done', price: 110, address: 'Rua Feliciano Sodré, 45 · Alcântara', respondedAt: now - 3 * 864e5 + 5 * MIN },
-  ]
-  return { users, requests, session: null }
-}
+const seed = (): DB => ({ ...buildSeed(), session: null })
 
 let db: DB = (() => {
   try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw) as DB } catch { /* noop */ }
@@ -110,7 +95,7 @@ export const toggleOnline = (id: string) => {
   pushUser(users.find((u) => u.id === id)!); lastWrite = Date.now(); set({ ...db, users })
 }
 
-export function createRequest(r: { clientId: string; proId: string; description: string; serviceAt: string; waitMinutes: number; address: string }) {
+export function createRequest(r: { clientId: string; proId: string; description: string; serviceAt: string; waitMinutes: number; address: string; payment?: string }) {
   const pro = db.users.find((u) => u.id === r.proId)!
   const now = Date.now()
   const req: Request = { id: `r-${now}`, ...r, category: pro.category ?? '', createdAt: now, expiresAt: now + r.waitMinutes * MIN, status: 'pending', price: pro.price ?? 0 }
@@ -123,6 +108,45 @@ export function setStatus(id: string, status: Status) {
   pushReq(requests.find((r) => r.id === id)!); lastWrite = Date.now()
   set({ ...db, requests })
 }
+export function patchUser(id: string, fn: (u: User) => User) {
+  const users = db.users.map((u) => (u.id === id ? fn(u) : u))
+  pushUser(users.find((u) => u.id === id)!); lastWrite = Date.now(); set({ ...db, users })
+}
+const newId = (p: string) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+const withDefault = <T extends { id: string; isDefault?: boolean }>(list: T[], item: T): T[] => {
+  const next = [...list, item]
+  return next.map((x) => ({ ...x, isDefault: next.some((y) => y.isDefault) ? x.isDefault : x.id === item.id }))
+}
+export const setPhoto = (id: string, photo: string | undefined) => patchUser(id, (u) => ({ ...u, photo }))
+export const addAddress = (id: string, a: Omit<Address, 'id'>) => patchUser(id, (u) => ({ ...u, addresses: withDefault(u.addresses ?? [], { ...a, id: newId('a'), isDefault: false }) }))
+export const removeAddress = (id: string, aid: string) => patchUser(id, (u) => {
+  const rest = (u.addresses ?? []).filter((a) => a.id !== aid)
+  return { ...u, addresses: rest.some((a) => a.isDefault) || !rest.length ? rest : rest.map((a, i) => ({ ...a, isDefault: i === 0 })) }
+})
+export const setDefaultAddress = (id: string, aid: string) => patchUser(id, (u) => ({ ...u, addresses: (u.addresses ?? []).map((a) => ({ ...a, isDefault: a.id === aid })) }))
+export const addCard = (id: string, c: Omit<Card, 'id'>) => patchUser(id, (u) => ({ ...u, cards: withDefault(u.cards ?? [], { ...c, id: newId('k'), isDefault: false }) }))
+export const removeCard = (id: string, cid: string) => patchUser(id, (u) => {
+  const rest = (u.cards ?? []).filter((c) => c.id !== cid)
+  return { ...u, cards: rest.some((c) => c.isDefault) || !rest.length ? rest : rest.map((c, i) => ({ ...c, isDefault: i === 0 })) }
+})
+export const setDefaultCard = (id: string, cid: string) => patchUser(id, (u) => ({ ...u, cards: (u.cards ?? []).map((c) => ({ ...c, isDefault: c.id === cid })) }))
+
+export function reviewRequest(id: string, rating: number, comment: string) {
+  const r0 = db.requests.find((r) => r.id === id)
+  if (!r0 || r0.status !== 'done' || r0.review) return
+  const requests = db.requests.map((r) => (r.id === id ? { ...r, review: { rating, comment: comment.trim(), at: Date.now() } } : r))
+  pushReq(requests.find((r) => r.id === id)!)
+  const pro = db.users.find((u) => u.id === r0.proId)
+  const users = pro ? db.users.map((u) => {
+    if (u.id !== pro.id) return u
+    const n = u.jobs ?? 0
+    return { ...u, rating: Math.round((((u.rating ?? 5) * n + rating) / (n + 1)) * 100) / 100 }
+  }) : db.users
+  if (pro) pushUser(users.find((u) => u.id === pro.id)!)
+  lastWrite = Date.now(); set({ ...db, users, requests })
+}
+export const needsReview = (r: Request) => r.status === 'done' && !r.review
+export const fmtAddress = (a: Address) => `${a.street}, ${a.number}${a.complement ? ` – ${a.complement}` : ''} · ${a.district}`
 export const userById = (id: string) => db.users.find((u) => u.id === id)
 
 export function fmtCountdown(ms: number) {
